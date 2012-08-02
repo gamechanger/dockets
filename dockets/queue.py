@@ -115,7 +115,7 @@ class Queue(PipelineObject):
                 self._retry_tracker.count(pipeline=pipeline)
                 self.log(RETRY, item)
                 # When we retry, first_ts stsys the same
-                pipeline.push(item_data, first_ts=item['first_ts'])
+                pipeline.push(item['data'], first_ts=item['first_ts'])
             except Exception as e:
                 self.log(ERROR, item, error=True)
                 self._error_tracker.count(pipeline=pipeline)
@@ -127,7 +127,7 @@ class Queue(PipelineObject):
                 worker_recorder.record_success(pipeline=pipeline)
             finally:
                 self._complete(item, worker_id, pipeline)
-                self._turnaround_time_tracker.add_time(time.time()-float(item_first_ts),
+                self._turnaround_time_tracker.add_time(time.time()-float(item['first_ts']),
                                                        pipeline=pipeline)
                 logging.debug('Pipeline is %s' % pipeline.command_stack)
                 pipeline.execute()
