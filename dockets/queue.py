@@ -54,7 +54,7 @@ class Queue(PipelineObject):
         self._turnaround_time_tracker = TimeTracker(self.redis, self.name, 'turnaround', _turnaround_time_tracker_size)
 
     ## abstract methods
-    def process_item(self, item):
+    def process_data(self, data):
         """
         Override this in subclasses.
         """
@@ -64,25 +64,25 @@ class Queue(PipelineObject):
         if error:
             logger.error('{0} {1} {2}'.format(self.name,
                                               event.capitalize(),
-                                              self.item_key(item['data'])),
+                                              self.data_key(item['data'])),
                          exc_info=True)
         logger.info('{0} {1} {2}'.format(self.name, event.capitalize(),
-                                         self.item_key(item['data'])))
+                                         self.data_key(item['data'])))
 
-    def item_key(self, item):
+    def data_key(self, data):
         if self.key:
-            return '_'.join(str(item.get(key_component, ''))
+            return '_'.join(str(data.get(key_component, ''))
                             for key_component in self.key)
-        return str(item)
+        return str(data)
 
 
     ## public methods
 
     @PipelineObject.with_pipeline
-    def push(self, item, pipeline, first_ts=None,):
+    def push(self, data, pipeline, first_ts=None,):
         item = {'first_ts': first_ts or time.time(),
                 'ts': time.time(),
-                'data': item,
+                'data': data,
                 'v': self.version}
         serialized_item = self._serialize(item)
         if self.mode == FIFO:
@@ -110,7 +110,7 @@ class Queue(PipelineObject):
             self._response_time_tracker.add_time(time.time()-float(item['ts']),
                                                  pipeline=pipeline)
             try:
-                return_value = self.process_item(item['data'])
+                return_value = self.process_data(item['data'])
             except errors.RetryError:
                 self._retry_tracker.count(pipeline=pipeline)
                 self.log(RETRY, item)
@@ -168,14 +168,14 @@ class Queue(PipelineObject):
     ## queueing fundamentals
 
     def _pop(self, worker_id):
-        item = self.redis.brpoplpush(self._queue_key(),
-                                     self._working_queue_key(worker_id))
-        item = self._deserialize(item)
+        serialized_item = self.redis.brpoplpush(self._queue_key(),
+                                                self._working_queue_key(worker_id))
+        item = self._deserialize(serialized_item)
         return item
 
     def _handle_return_value(self, item, value, pipeline):
         data = item['data']
-        key = self.item_key(data)
+        key = self.data_key(data)
         first_ts = item['first_ts']
         for handler in self._handlers.get(value, []):
             handler(data, first_ts=first_ts, pipeline=pipeline, redis=self.redis,
@@ -237,7 +237,8 @@ class Queue(PipelineObject):
     def _complete(self, item, worker_id, pipeline):
         pipeline.lrem(self._working_queue_key(worker_id), self._serialize(item))
 
+
 class TestQueue(Queue):
-    def process_item(self, item):
+    def process_data(self, data):
         time.sleep(2)
-        logging.info('in process_item, processing {0}'.format(item))
+        logging.info('in process_data, processing {0}'.format(data))
