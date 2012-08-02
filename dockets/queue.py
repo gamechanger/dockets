@@ -62,7 +62,7 @@ class Queue(PipelineObject):
 
     def log(self, event, item, error=False):
         if error:
-            logger.error('{0} {1} {2}'.format(elf.name,
+            logger.error('{0} {1} {2}'.format(self.name,
                                               event.capitalize(),
                                               self.item_key(item)),
                          exc_info=True)
