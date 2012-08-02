@@ -64,13 +64,12 @@ class Queue(PipelineObject):
         if error:
             logger.error('{0} {1} {2}'.format(self.name,
                                               event.capitalize(),
-                                              self.item_key(item)),
+                                              self.item_key(item['data'])),
                          exc_info=True)
         logger.info('{0} {1} {2}'.format(self.name, event.capitalize(),
-                                         self.item_key(item)))
+                                         self.item_key(item['data'])))
 
     def item_key(self, item):
-        item = item['data']
         if self.key:
             return '_'.join(str(item.get(key_component, ''))
                             for key_component in self.key)
@@ -175,8 +174,8 @@ class Queue(PipelineObject):
         return item
 
     def _handle_return_value(self, item, value, pipeline):
-        key = self.item_key(item)
         data = item['data']
+        key = self.item_key(data)
         first_ts = item['first_ts']
         for handler in self._handlers.get(value, []):
             handler(data, first_ts=first_ts, pipeline=pipeline, redis=self.redis,
