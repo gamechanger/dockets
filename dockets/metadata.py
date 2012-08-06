@@ -36,7 +36,10 @@ class RateTracker(object):
         self.list.add(current_time or time.time(), pipeline=pipeline)
 
     def rate(self):
-        return len(self.list) / (float(self.list[0] or 0) - float(self.list[-1] or 0))
+        divisor = float(self.list[0] or 0) - float(self.list[-1] or 0)
+        if divisor == 0:
+            return 0
+        return (len(self.list) - 1) / divisor
 
 
 class TimeTracker(object):
@@ -50,6 +53,9 @@ class TimeTracker(object):
         self.list.add(time, pipeline=pipeline)
 
     def average_time(self):
+        divisor = len(self.list)
+        if divisor == 0:
+            return 0
         return sum(float(t) for t in self.list)/len(self.list)
 
 class WorkerMetadataRecorder(PipelineObject):
