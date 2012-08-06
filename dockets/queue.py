@@ -79,6 +79,22 @@ class Queue(PipelineObject):
     ## public methods
 
     @PipelineObject.with_pipeline
+    def pop(self, worker_id, pipeline, blocking=True):
+        args = [self._queue_key(), self._working_queue_key(worker_id)]
+        if blocking:
+            serialized_item = self.redis.brpoplpush(*args)
+        else:
+            serialized_item = self.redis.rpoplpush(*args)
+        if not serialized_item:
+            return None
+        item = self._deserialize(serialized_item)
+        self._record_worker_activity(worker_id, pipeline=pipeline)
+        self._response_time_tracker.add_time(time.time()-float(item['ts']),
+                                             pipeline=pipeline)
+        return item
+
+
+    @PipelineObject.with_pipeline
     def push(self, data, pipeline, first_ts=None,):
         item = {'first_ts': first_ts or time.time(),
                 'ts': time.time(),
@@ -91,7 +107,17 @@ class Queue(PipelineObject):
             pipeline.rpush(self._queue_key(), serialized_item)
         self.log(PUSH, item)
 
+
+    @PipelineObject.with_pipeline
+    def complete(self, item, worker_id, pipeline):
+        pipeline.lrem(self._working_queue_key(worker_id), self._serialize(item))
+
     def run(self, worker_id=None, extra_metadata={}):
+        self.register_worker(worker_id, extra_metadata)
+        while True:
+            self.run_once(worker_id)
+
+    def register_worker(self, worker_id=None, extra_metadata={}):
         self._reclaim()
 
         # set up this worker
@@ -99,38 +125,47 @@ class Queue(PipelineObject):
         worker_recorder = WorkerMetadataRecorder(self.redis, self.name,
                                                  worker_id)
         worker_recorder.record_initial_metadata(extra_metadata)
+        return worker_id
 
-        while True:
-            item = self._pop(worker_id)
+    def run_once(self, worker_id):
+        """
+        Run the queue for one step. Use blocking mode unless you can't
+        (e.g. unit tests)
+        """
+        worker_recorder = WorkerMetadataRecorder(self.redis, self.name,
+                                                 worker_id)
+        # The Big Pipeline
+        pipeline = self.redis.pipeline()
+        item = self.pop(worker_id, pipeline=pipeline)
 
-            # The Big Pipeline
-            pipeline = self.redis.pipeline()
+        # if we time out
+        if not item:
+            return
 
-            self._record_worker_activity(worker_id, pipeline)
-            self._response_time_tracker.add_time(time.time()-float(item['ts']),
-                                                 pipeline=pipeline)
-            try:
-                return_value = self.process_data(item['data'])
-            except errors.RetryError:
-                self._retry_tracker.count(pipeline=pipeline)
-                self.log(RETRY, item)
-                # When we retry, first_ts stsys the same
-                pipeline.push(item['data'], first_ts=item['first_ts'])
-            except Exception as e:
-                self.log(ERROR, item, error=True)
-                self._error_tracker.count(pipeline=pipeline)
-                worker_recorder.record_error(pipeline=pipeline)
-            else:
-                self.log(SUCCESS, item)
-                self._handle_return_value(item, return_value, pipeline)
-                self._success_tracker.count(pipeline=pipeline)
-                worker_recorder.record_success(pipeline=pipeline)
-            finally:
-                self._complete(item, worker_id, pipeline)
-                self._turnaround_time_tracker.add_time(time.time()-float(item['first_ts']),
-                                                       pipeline=pipeline)
-                logging.debug('Pipeline is %s' % pipeline.command_stack)
-                pipeline.execute()
+        try:
+            return_value = self.process_data(item['data'])
+        except errors.RetryError:
+            self._retry_tracker.count(pipeline=pipeline)
+            self.log(RETRY, item)
+            worker_recorder.record_retry(pipeline=pipeline)
+            # When we retry, first_ts stsys the same
+            self.push(item['data'], first_ts=item['first_ts'], pipeline=pipeline)
+        except Exception as e:
+            self.log(ERROR, item, error=True)
+            self._error_tracker.count(pipeline=pipeline)
+            worker_recorder.record_error(pipeline=pipeline)
+        else:
+            self.log(SUCCESS, item)
+            self._handle_return_value(item, return_value, pipeline)
+            self._success_tracker.count(pipeline=pipeline)
+            worker_recorder.record_success(pipeline=pipeline)
+        finally:
+            self.complete(item, worker_id, pipeline=pipeline)
+            self._turnaround_time_tracker.add_time(time.time()-float(item['first_ts']),
+                                                   pipeline=pipeline)
+            pipeline.execute()
+
+
 
     def add_handler(self, return_value, handler):
         self._handlers[return_value].append(handler)
@@ -166,12 +201,6 @@ class Queue(PipelineObject):
         return self.redis.llen(self._queue_key())
 
     ## queueing fundamentals
-
-    def _pop(self, worker_id):
-        serialized_item = self.redis.brpoplpush(self._queue_key(),
-                                                self._working_queue_key(worker_id))
-        item = self._deserialize(serialized_item)
-        return item
 
     def _handle_return_value(self, item, value, pipeline):
         data = item['data']
@@ -215,6 +244,7 @@ class Queue(PipelineObject):
         metadata.update(extra_metadata)
         return metadata
 
+    @PipelineObject.with_pipeline
     def _record_worker_activity(self, worker_id, pipeline):
         pipeline.sadd(self._workers_set_key(), worker_id)
         pipeline.setex(self._worker_activity_key(worker_id), 1,
@@ -232,11 +262,6 @@ class Queue(PipelineObject):
         while self.redis.rpoplpush(self._working_queue_key(worker_id),
                                    self._queue_key()):
             continue
-
-
-    def _complete(self, item, worker_id, pipeline):
-        pipeline.lrem(self._working_queue_key(worker_id), self._serialize(item))
-
 
 class TestQueue(Queue):
     def process_data(self, data):
