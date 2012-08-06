@@ -5,7 +5,7 @@ from util import FakeRedisContext
 
 from dockets.queue import Queue
 from dockets.isolation_queue import IsolationQueue
-from dockets.errors import RetryError
+from dockets.errors import RetryError, ExpiredError
 
 class TestQueue(Queue):
     def __init__(self, *args, **kwargs):
@@ -19,6 +19,8 @@ class TestQueue(Queue):
             return
         if data['action'] == 'retry':
             raise RetryError
+        if data['action'] == 'expire':
+            raise ExpiredError
         if data['action'] == 'error':
             raise Exception(data['message'])
 
@@ -34,6 +36,8 @@ class TestIsolationQueue(IsolationQueue):
             return
         if data['action'] == 'retry':
             raise RetryError
+        if data['action'] == 'expire':
+            raise ExpiredError
         if data['action'] == 'error':
             raise Exception(data['message'])
 
@@ -296,6 +300,11 @@ def basic_queue_tests(context_class):
                 def should_not_contain_last_retry_ts(self, topic):
                     expect(topic).Not.to_include('last_retry_ts')
 
+                def should_not_contain_expire(self, topic):
+                    expect(topic).Not.to_include('expire')
+
+                def should_not_contain_expire_ts(self, topic):
+                    expect(topic).Not.to_include('last_expire_ts')
 
         class WhenRetryItemIsRunOnce(context_class):
             def use_queue(self, queue):
@@ -334,11 +343,63 @@ def basic_queue_tests(context_class):
                 def should_not_contain_last_error_ts(self, topic):
                     expect(topic).Not.to_include('last_error_ts')
 
+                def should_not_contain_expire(self, topic):
+                    expect(topic).Not.to_include('expire')
+
+                def should_not_contain_expire_ts(self, topic):
+                    expect(topic).Not.to_include('last_expire_ts')
+
                 def should_not_contain_success(self, topic):
                     expect(topic).Not.to_include('success')
 
                 def should_not_contain_last_success_ts(self, topic):
                     expect(topic).Not.to_include('last_success_ts')
+
+        class WhenExpireItemIsRunOnce(context_class):
+            def use_queue(self, queue):
+                queue.push({'action': 'expire'})
+                queue.run_once(worker_id='test_worker')
+
+            def data_processed_should_be_empty(self, queue):
+                expect(queue.data_processed).to_be_empty()
+
+            def should_have_no_entries(self, queue):
+                expect(queue.queued()).to_equal(0)
+
+            class TheWorkerMetadata(Vows.Context):
+                def topic(self, queue):
+                    return queue.active_worker_metadata()['test_worker']
+
+                def should_exist(self, topic):
+                    expect(topic).Not.to_be_null()
+
+                def should_contain_last_expire_ts(self, topic):
+                    expect(topic).to_include('last_expire_ts')
+
+                def should_contain_expire(self, topic):
+                    expect(topic).to_include('expire')
+
+                def expire_should_be_one(self, topic):
+                    expect(topic['expire']).to_equal(1)
+
+                def should_not_contain_error(self, topic):
+                    expect(topic).Not.to_include('error')
+
+                def should_not_contain_last_error_ts(self, topic):
+                    expect(topic).Not.to_include('last_error_ts')
+
+                def should_not_contain_retry(self, topic):
+                    expect(topic).Not.to_include('retry')
+
+                def should_not_contain_last_retry_ts(self, topic):
+                    expect(topic).Not.to_include('last_retry_ts')
+
+                def should_not_contain_success(self, topic):
+                    expect(topic).Not.to_include('success')
+
+                def should_not_contain_last_success_ts(self, topic):
+                    expect(topic).Not.to_include('last_success_ts')
+
 
         class WhenErrorItemIsRunOnce(context_class):
             def use_queue(self, queue):
@@ -372,6 +433,12 @@ def basic_queue_tests(context_class):
 
                 def should_not_contain_last_retry_ts(self, topic):
                     expect(topic).Not.to_include('last_retry_ts')
+
+                def should_not_contain_expire(self, topic):
+                    expect(topic).Not.to_include('expire')
+
+                def should_not_contain_expire_ts(self, topic):
+                    expect(topic).Not.to_include('last_expire_ts')
 
                 def should_not_contain_success(self, topic):
                     expect(topic).Not.to_include('retry')

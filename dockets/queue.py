@@ -38,12 +38,15 @@ class Queue(PipelineObject):
 
         _error_tracker_size = kwargs.get('error_tracker_size', 50)
         _retry_tracker_size = kwargs.get('retry_tracker_size',50)
+        _expire_tracker_size = kwargs.get('expire_tracker_size',50)
         _success_tracker_size = kwargs.get('success_tracker_size', 100)
+
         _response_time_tracker_size = kwargs.get('response_time_tracker_size', 100)
         _turnaround_time_tracker_size = kwargs.get('turnaround_time_tracker_size', 100)
 
         self._error_tracker = RateTracker(self.redis, self.name, ERROR, _error_tracker_size)
         self._retry_tracker = RateTracker(self.redis, self.name, RETRY, _error_tracker_size)
+        self._expire_tracker = RateTracker(self.redis, self.name, EXPIRE, _expire_tracker_size)
         self._success_tracker = RateTracker(self.redis, self.name, SUCCESS, _success_tracker_size)
 
 
@@ -94,11 +97,12 @@ class Queue(PipelineObject):
 
 
     @PipelineObject.with_pipeline
-    def push(self, data, pipeline, first_ts=None,):
+    def push(self, data, pipeline, first_ts=None, ttl=None):
         item = {'first_ts': first_ts or time.time(),
                 'ts': time.time(),
                 'data': data,
-                'v': self.version}
+                'v': self.version,
+                'ttl': ttl}
         serialized_item = self._serialize(item)
         if self.mode == FIFO:
             pipeline.lpush(self._queue_key(), serialized_item)
@@ -142,7 +146,13 @@ class Queue(PipelineObject):
             return
 
         try:
+            if item['ttl'] and (item['first_ts'] + item['ttl'] < time.time()):
+                raise errors.ExpiredError
             return_value = self.process_data(item['data'])
+        except errors.ExpiredError:
+            self._expire_tracker.count(pipeline=pipeline)
+            self.log(EXPIRE, item)
+            worker_recorder.record_expire(pipeline=pipeline)
         except errors.RetryError:
             self._retry_tracker.count(pipeline=pipeline)
             self.log(RETRY, item)
