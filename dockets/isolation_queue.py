@@ -39,7 +39,7 @@ class IsolationQueue(Queue):
                     key_in_queue = pipeline.sismember(self._entry_set_key(), key)
                     pipeline.multi()
                     if key_in_queue:
-                        pipeline.hset(self._latest_hash_key(),
+                        pipeline.hset(self._latest_add_key(),
                                       key, self._serialize(data))
                     else:
                         super(IsolationQueue, self).push(data, pipeline=pipeline)
@@ -59,13 +59,13 @@ class IsolationQueue(Queue):
             while True:
                 try:
                     pipeline.watch(self._entry_set_key())
-                    latest_version = pipeline.hget(self._latest_hash_key(), key)
+                    latest_version = pipeline.hget(self._latest_add_key(), key)
                     pipeline.multi()
                     if latest_version:
                         latest_version = self._deserialize(latest_version)
                         # we just call Queue.push since we know it's already in the queue
                         super(IsolationQueue, self).push(latest_version, pipeline=pipeline)
-                        pipeline.hdel(self._latest_hash_key(), key)
+                        pipeline.hdel(self._latest_add_key(), key)
                     pipeline.srem(self._entry_set_key(), key)
                     pipeline.execute()
                     break
@@ -79,8 +79,8 @@ class IsolationQueue(Queue):
     def _entry_set_key(self):
         return 'queue.{0}.entries'.format(self.name)
 
-    def _latest_hash_key(self):
-        return 'queue.{0}.lastest'.format(self.name)
+    def _latest_add_key(self):
+        return 'queue.{0}.latest'.format(self.name)
 
 
 class TestIsolationQueue(IsolationQueue):
