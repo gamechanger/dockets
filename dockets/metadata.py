@@ -88,5 +88,11 @@ class WorkerMetadataRecorder(PipelineObject):
         pipeline.hset(self._key_name(), 'last_error_ts', time.time())
         pipeline.expire(self._key_name(), METADATA_TIMEOUT)
 
+    @PipelineObject.with_pipeline
+    def record_retry(self, pipeline):
+        pipeline.hincrby(self._key_name(), 'retry', 1)
+        pipeline.hset(self._key_name(), 'last_retry_ts', time.time())
+        pipeline.expire(self._key_name(), METADATA_TIMEOUT)
+
     def all_data(self):
         return self.redis.hgetall(self._key_name())
