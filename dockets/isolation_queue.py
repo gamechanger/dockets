@@ -66,7 +66,8 @@ class IsolationQueue(Queue):
                         # we just call Queue.push since we know it's already in the queue
                         super(IsolationQueue, self).push(latest_version, pipeline=pipeline)
                         pipeline.hdel(self._latest_add_key(), key)
-                    pipeline.srem(self._entry_set_key(), key)
+                    else:
+                        pipeline.srem(self._entry_set_key(), key)
                     pipeline.execute()
                     break
                 except WatchError:
