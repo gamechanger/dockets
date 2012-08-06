@@ -37,7 +37,7 @@ class Queue(PipelineObject):
         self._dumps_kwargs = kwargs.get('dumps_kwargs', {})
 
         _error_tracker_size = kwargs.get('error_tracker_size', 50)
-        _retry_tracker_size = kwargs.get('error_tracker_size',50)
+        _retry_tracker_size = kwargs.get('retry_tracker_size',50)
         _success_tracker_size = kwargs.get('success_tracker_size', 100)
         _response_time_tracker_size = kwargs.get('response_time_tracker_size', 100)
         _turnaround_time_tracker_size = kwargs.get('turnaround_time_tracker_size', 100)
