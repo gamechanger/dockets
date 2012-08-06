@@ -19,12 +19,13 @@ ERROR = 'error'
 RETRY = 'retry'
 PUSH = 'push'
 
-DEFAULT_JSON_ENCODER = None
-
 class Queue(PipelineObject):
     """
     Basic queue that does no entry tracking
     """
+
+    loads_kwargs = {}
+    dumps_kwargs = {}
 
     def __init__(self, redis, name, **kwargs):
         super(Queue, self).__init__(redis)
@@ -34,8 +35,6 @@ class Queue(PipelineObject):
         self.key = kwargs.get('key')
         self.version = kwargs.get('version', 1)
         self._handlers = defaultdict(list)
-
-        self.json_encoder = kwargs.get('json_encoder') or DEFAULT_JSON_ENCODER
 
         self._activity_timeout = kwargs.get('timeout', 60)
 
@@ -226,11 +225,11 @@ class Queue(PipelineObject):
     ## serialization
 
     def _serialize(self, item):
-        return json.dumps(item, sort_keys=True, cls=self.json_encoder)
+        return json.dumps(item, sort_keys=True, **self.dumps_kwargs)
 
     def _deserialize(self, item):
         try:
-            item = json.loads(item)
+            item = json.loads(item, **self.loads_kwargs)
         except:
             raise SerializationError
         return item
