@@ -32,8 +32,8 @@ class RateTracker(object):
                                'queue.{0}.rate.{1}'.format(name, type),
                                size)
 
-    def count(self, pipeline=None):
-        self.list.add(time.time(), pipeline=pipeline)
+    def count(self, pipeline=None, current_time=None):
+        self.list.add(current_time or time.time(), pipeline=pipeline)
 
     def rate(self):
         return len(self.list) / (float(self.list[0] or 0) - float(self.list[-1] or 0))
