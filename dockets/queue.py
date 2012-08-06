@@ -24,9 +24,6 @@ class Queue(PipelineObject):
     Basic queue that does no entry tracking
     """
 
-    loads_kwargs = {}
-    dumps_kwargs = {}
-
     def __init__(self, redis, name, **kwargs):
         super(Queue, self).__init__(redis)
         self.name = name
@@ -34,9 +31,10 @@ class Queue(PipelineObject):
         assert self.mode in [FIFO, LIFO], 'Invalid mode'
         self.key = kwargs.get('key')
         self.version = kwargs.get('version', 1)
-        self._handlers = defaultdict(list)
 
         self._activity_timeout = kwargs.get('timeout', 60)
+        self._loads_kwargs = kwargs.get('loads_kwargs', {})
+        self._dumps_kwargs = kwargs.get('dumps_kwargs', {})
 
         _error_tracker_size = kwargs.get('error_tracker_size', 50)
         _retry_tracker_size = kwargs.get('error_tracker_size',50)
@@ -51,6 +49,8 @@ class Queue(PipelineObject):
 
         self._response_time_tracker = TimeTracker(self.redis, self.name, 'response', _response_time_tracker_size)
         self._turnaround_time_tracker = TimeTracker(self.redis, self.name, 'turnaround', _turnaround_time_tracker_size)
+
+        self._handlers = defaultdict(list)
 
     ## abstract methods
     def process_data(self, data):
@@ -225,11 +225,11 @@ class Queue(PipelineObject):
     ## serialization
 
     def _serialize(self, item):
-        return json.dumps(item, sort_keys=True, **self.dumps_kwargs)
+        return json.dumps(item, sort_keys=True, **self._dumps_kwargs)
 
     def _deserialize(self, item):
         try:
-            item = json.loads(item, **self.loads_kwargs)
+            item = json.loads(item, **self._loads_kwargs)
         except:
             raise SerializationError
         return item
