@@ -49,7 +49,7 @@ class IsolationQueue(Queue):
                 except WatchError:
                     continue
 
-    def _complete(self, item, *args, **kwargs):
+    def complete(self, item, *args, **kwargs):
         """
         Complete is also not quite atomic, since we need to do a
         watch.
@@ -71,7 +71,7 @@ class IsolationQueue(Queue):
                     break
                 except WatchError:
                     continue
-        super(IsolationQueue, self)._complete(item, *args, **kwargs)
+        super(IsolationQueue, self).complete(item, *args, **kwargs)
 
 
     # key names
