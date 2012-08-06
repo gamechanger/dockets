@@ -27,6 +27,10 @@ class IsolationQueue(Queue):
         it needs to do a watch. This has some implications on retries
         and incoming queue pipes: they will not be atomic.
         """
+        if 'pipeline' in kwargs:
+            # If we're being piped to or retrying
+            return super(IsolationQueue, self).push(data, **kwargs)
+
         key = self.data_key(data)
         with self.redis.pipeline() as pipeline:
             while True:
