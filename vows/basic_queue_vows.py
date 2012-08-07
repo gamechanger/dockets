@@ -10,36 +10,36 @@ from dockets.errors import RetryError, ExpiredError
 class TestQueue(Queue):
     def __init__(self, *args, **kwargs):
         super(TestQueue, self).__init__(*args, **kwargs)
-        self.data_processed = []
+        self.items_processed = []
 
-    def process_data(self, data):
-        if (not isinstance(data, dict) or 'action' not in data
-            or data['action'] == 'success'):
-            self.data_processed.append(data)
+    def process_item(self, item):
+        if (not isinstance(item, dict) or 'action' not in item
+            or item['action'] == 'success'):
+            self.items_processed.append(item)
             return
-        if data['action'] == 'retry':
+        if item['action'] == 'retry':
             raise RetryError
-        if data['action'] == 'expire':
+        if item['action'] == 'expire':
             raise ExpiredError
-        if data['action'] == 'error':
-            raise Exception(data['message'])
+        if item['action'] == 'error':
+            raise Exception(item['message'])
 
 class TestIsolationQueue(IsolationQueue):
     def __init__(self, *args, **kwargs):
         super(TestIsolationQueue, self).__init__(*args, **kwargs)
-        self.data_processed = []
+        self.items_processed = []
 
-    def process_data(self, data):
-        if (not isinstance(data, dict) or 'action' not in data
-            or data['action'] == 'success'):
-            self.data_processed.append(data)
+    def process_item(self, item):
+        if (not isinstance(item, dict) or 'action' not in item
+            or item['action'] == 'success'):
+            self.items_processed.append(item)
             return
-        if data['action'] == 'retry':
+        if item['action'] == 'retry':
             raise RetryError
-        if data['action'] == 'expire':
+        if item['action'] == 'expire':
             raise ExpiredError
-        if data['action'] == 'error':
-            raise Exception(data['message'])
+        if item['action'] == 'error':
+            raise Exception(item['message'])
 
 class SingleQueueContext(FakeRedisContext):
     def __init__(self, *args, **kwargs):
@@ -89,14 +89,14 @@ def queue_entry_checker(entry_value):
             def should_have_version_key(self, topic):
                 expect(topic).to_include('v')
 
-            def should_have_data_key(self, topic):
-                expect(topic).to_include('data')
+            def should_have_item_key(self, topic):
+                expect(topic).to_include('item')
 
-            class TheDataKey(Vows.Context):
-                def topic(self, item):
-                    return item['data']
+            class TheItemKey(Vows.Context):
+                def topic(self, envelope):
+                    return envelope['item']
 
-                def should_be_input_data(self, topic):
+                def should_be_input_item(self, topic):
                     expect(topic).to_equal(entry_value)
     return TheEntry
 
@@ -210,8 +210,8 @@ def basic_queue_tests(context_class):
                 queue.register_worker(worker_id='test_worker')
                 queue.run_once(worker_id='test_worker')
 
-            def item_should_be_in_data_processed(self, queue):
-                expect(queue.data_processed).to_include({'a': 1})
+            def item_should_be_in_items_processed(self, queue):
+                expect(queue.items_processed).to_include({'a': 1})
 
             def worker_should_be_active(self, queue):
                 expect(queue.redis.exists('queue.test.test_worker.active')).to_be_true()
@@ -257,11 +257,11 @@ def basic_queue_tests(context_class):
                 queue.run_once(worker_id='test_worker')
                 queue.run_once(worker_id='test_worker')
 
-            def first_item_should_be_in_data_processed(self, queue):
-                expect(queue.data_processed).to_include({'a': 1})
+            def first_item_should_be_in_items_processed(self, queue):
+                expect(queue.items_processed).to_include({'a': 1})
 
-            def second_item_should_be_in_data_processed(self, queue):
-                expect(queue.data_processed).to_include({'b': 2})
+            def second_item_should_be_in_items_processed(self, queue):
+                expect(queue.items_processed).to_include({'b': 2})
 
             def worker_should_be_active(self, queue):
                 expect(queue.redis.exists('queue.test.test_worker.active')).to_be_true()
@@ -311,8 +311,8 @@ def basic_queue_tests(context_class):
                 queue.push({'action': 'retry'})
                 queue.run_once(worker_id='test_worker')
 
-            def data_processed_should_be_empty(self, queue):
-                expect(queue.data_processed).to_be_empty()
+            def items_processed_should_be_empty(self, queue):
+                expect(queue.items_processed).to_be_empty()
 
             def should_have_one_entry(self, queue):
                 expect(queue.queued()).to_equal(1)
@@ -360,8 +360,8 @@ def basic_queue_tests(context_class):
                 queue.push({'action': 'expire'})
                 queue.run_once(worker_id='test_worker')
 
-            def data_processed_should_be_empty(self, queue):
-                expect(queue.data_processed).to_be_empty()
+            def items_processed_should_be_empty(self, queue):
+                expect(queue.items_processed).to_be_empty()
 
             def should_have_no_entries(self, queue):
                 expect(queue.queued()).to_equal(0)
@@ -406,8 +406,8 @@ def basic_queue_tests(context_class):
                 queue.push({'action': 'error', 'message': 'Error!'})
                 queue.run_once(worker_id='test_worker')
 
-            def data_processed_should_be_empty(self, queue):
-                expect(queue.data_processed).to_be_empty()
+            def items_processed_should_be_empty(self, queue):
+                expect(queue.items_processed).to_be_empty()
 
             def should_be_empty(self, queue):
                 expect(queue.queued()).to_equal(0)

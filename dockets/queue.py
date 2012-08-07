@@ -56,26 +56,26 @@ class Queue(PipelineObject):
         self._handlers = defaultdict(list)
 
     ## abstract methods
-    def process_data(self, data):
+    def process_item(self, item):
         """
         Override this in subclasses.
         """
         raise NotImplementedError
 
-    def log(self, event, item, error=False):
+    def log(self, event, envelope, error=False):
         if error:
             logger.error('{0} {1} {2}'.format(self.name,
                                               event.capitalize(),
-                                              self.data_key(item['data'])),
+                                              self.item_key(envelope['item'])),
                          exc_info=True)
         logger.info('{0} {1} {2}'.format(self.name, event.capitalize(),
-                                         self.data_key(item['data'])))
+                                         self.item_key(envelope['item'])))
 
-    def data_key(self, data):
+    def item_key(self, item):
         if self.key:
-            return '_'.join(str(data.get(key_component, ''))
+            return '_'.join(str(item.get(key_component, ''))
                             for key_component in self.key)
-        return str(data)
+        return str(item)
 
 
     ## public methods
@@ -84,36 +84,36 @@ class Queue(PipelineObject):
     def pop(self, worker_id, pipeline, blocking=True):
         args = [self._queue_key(), self._working_queue_key(worker_id)]
         if blocking:
-            serialized_item = self.redis.brpoplpush(*args)
+            serialized_envelope = self.redis.brpoplpush(*args)
         else:
-            serialized_item = self.redis.rpoplpush(*args)
-        if not serialized_item:
+            serialized_envelope = self.redis.rpoplpush(*args)
+        if not serialized_envelope:
             return None
-        item = self._deserialize(serialized_item)
+        envelope = self._deserialize(serialized_envelope)
         self._record_worker_activity(worker_id, pipeline=pipeline)
-        self._response_time_tracker.add_time(time.time()-float(item['ts']),
+        self._response_time_tracker.add_time(time.time()-float(envelope['ts']),
                                              pipeline=pipeline)
-        return item
+        return envelope
 
 
     @PipelineObject.with_pipeline
-    def push(self, data, pipeline, first_ts=None, ttl=None):
-        item = {'first_ts': first_ts or time.time(),
+    def push(self, item, pipeline, first_ts=None, ttl=None):
+        envelope = {'first_ts': first_ts or time.time(),
                 'ts': time.time(),
-                'data': data,
+                'item': item,
                 'v': self.version,
                 'ttl': ttl}
-        serialized_item = self._serialize(item)
+        serialized_envelope = self._serialize(envelope)
         if self.mode == FIFO:
-            pipeline.lpush(self._queue_key(), serialized_item)
+            pipeline.lpush(self._queue_key(), serialized_envelope)
         else:
-            pipeline.rpush(self._queue_key(), serialized_item)
-        self.log(PUSH, item)
+            pipeline.rpush(self._queue_key(), serialized_envelope)
+        self.log(PUSH, envelope)
 
 
     @PipelineObject.with_pipeline
-    def complete(self, item, worker_id, pipeline):
-        pipeline.lrem(self._working_queue_key(worker_id), self._serialize(item))
+    def complete(self, envelope, worker_id, pipeline):
+        pipeline.lrem(self._working_queue_key(worker_id), self._serialize(envelope))
 
     def run(self, worker_id=None, extra_metadata={}):
         self.register_worker(worker_id, extra_metadata)
@@ -139,38 +139,38 @@ class Queue(PipelineObject):
                                                  worker_id)
         # The Big Pipeline
         pipeline = self.redis.pipeline()
-        item = self.pop(worker_id, pipeline=pipeline)
+        envelope = self.pop(worker_id, pipeline=pipeline)
 
         # if we time out
-        if not item:
+        if not envelope:
             return
 
         try:
-            if item['ttl'] and (item['first_ts'] + item['ttl'] < time.time()):
+            if envelope['ttl'] and (envelope['first_ts'] + envelope['ttl'] < time.time()):
                 raise errors.ExpiredError
-            return_value = self.process_data(item['data'])
+            return_value = self.process_item(envelope['item'])
         except errors.ExpiredError:
             self._expire_tracker.count(pipeline=pipeline)
-            self.log(EXPIRE, item)
+            self.log(EXPIRE, envelope)
             worker_recorder.record_expire(pipeline=pipeline)
         except errors.RetryError:
             self._retry_tracker.count(pipeline=pipeline)
-            self.log(RETRY, item)
+            self.log(RETRY, envelope)
             worker_recorder.record_retry(pipeline=pipeline)
             # When we retry, first_ts stsys the same
-            self.push(item['data'], first_ts=item['first_ts'], pipeline=pipeline)
+            self.push(envelope['item'], first_ts=envelope['first_ts'], pipeline=pipeline)
         except Exception as e:
-            self.log(ERROR, item, error=True)
+            self.log(ERROR, envelope, error=True)
             self._error_tracker.count(pipeline=pipeline)
             worker_recorder.record_error(pipeline=pipeline)
         else:
-            self.log(SUCCESS, item)
-            self._handle_return_value(item, return_value, pipeline)
+            self.log(SUCCESS, envelope)
+            self._handle_return_value(envelope, return_value, pipeline)
             self._success_tracker.count(pipeline=pipeline)
             worker_recorder.record_success(pipeline=pipeline)
         finally:
-            self.complete(item, worker_id, pipeline=pipeline)
-            self._turnaround_time_tracker.add_time(time.time()-float(item['first_ts']),
+            self.complete(envelope, worker_id, pipeline=pipeline)
+            self._turnaround_time_tracker.add_time(time.time()-float(envelope['first_ts']),
                                                    pipeline=pipeline)
             pipeline.execute()
 
@@ -210,12 +210,12 @@ class Queue(PipelineObject):
 
     ## queueing fundamentals
 
-    def _handle_return_value(self, item, value, pipeline):
-        data = item['data']
-        key = self.data_key(data)
-        first_ts = item['first_ts']
+    def _handle_return_value(self, envelope, value, pipeline):
+        item = envelope['item']
+        key = self.item_key(item)
+        first_ts = envelope['first_ts']
         for handler in self._handlers.get(value, []):
-            handler(data, first_ts=first_ts, pipeline=pipeline, redis=self.redis,
+            handler(item, first_ts=first_ts, pipeline=pipeline, redis=self.redis,
                     value=value, key=key)
 
     ## names of keys in redis
@@ -234,15 +234,15 @@ class Queue(PipelineObject):
 
     ## serialization
 
-    def _serialize(self, item):
-        return json.dumps(item, sort_keys=True, **self._dumps_kwargs)
+    def _serialize(self, obj):
+        return json.dumps(obj, sort_keys=True, **self._dumps_kwargs)
 
-    def _deserialize(self, item):
+    def _deserialize(self, json_obj):
         try:
-            item = json.loads(item, **self._loads_kwargs)
+            obj = json.loads(json_obj, **self._loads_kwargs)
         except:
             raise SerializationError
-        return item
+        return obj
 
     ## worker handling
 
@@ -272,6 +272,6 @@ class Queue(PipelineObject):
             continue
 
 class TestQueue(Queue):
-    def process_data(self, data):
+    def process_item(self, item):
         time.sleep(2)
-        logging.info('in process_data, processing {0}'.format(data))
+        logging.info('in process_item, processing {0}'.format(item))

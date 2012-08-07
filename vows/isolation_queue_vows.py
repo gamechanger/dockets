@@ -17,17 +17,17 @@ class TestIsolationQueueWithKey(IsolationQueue):
     def __init__(self, *args, **kwargs):
         kwargs['key'] = ['a']
         super(TestIsolationQueueWithKey, self).__init__(*args, **kwargs)
-        self.data_processed = []
+        self.items_processed = []
 
-    def process_data(self, data):
-        if (not isinstance(data, dict) or 'action' not in data
-            or data['action'] == 'success'):
-            self.data_processed.append(data)
+    def process_item(self, item):
+        if (not isinstance(item, dict) or 'action' not in item
+            or item['action'] == 'success'):
+            self.items_processed.append(item)
             return
-        if data['action'] == 'retry':
+        if item['action'] == 'retry':
             raise RetryError
-        if data['action'] == 'error':
-            raise Exception(data['message'])
+        if item['action'] == 'error':
+            raise Exception(item['message'])
 
 
 class IsolationQueueWithKeyContext(FakeRedisContext):
@@ -131,9 +131,9 @@ class AnIsolationQueue(Vows.Context):
             def should_be_empty(self, topic):
                 expect(topic).to_be_empty()
 
-        class TheDataProcessed(Vows.Context):
+        class TheItemProcessed(Vows.Context):
             def topic(self, queue):
-                return queue.data_processed
+                return queue.items_processed
 
             def should_be_first_item(self, topic):
                 expect(topic).to_be_like([{'a': 1, 'b': 1}])
@@ -162,9 +162,9 @@ class AnIsolationQueue(Vows.Context):
             def should_be_empty(self, topic):
                 expect(topic).to_be_empty()
 
-        class TheDataProcessed(Vows.Context):
+        class TheItemProcessed(Vows.Context):
             def topic(self, queue):
-                return queue.data_processed
+                return queue.items_processed
 
             def should_be_first_and_second_items(self, topic):
                 expect(topic).to_be_like([{'a': 1, 'b': 1}, {'a': 1, 'b': 2}])

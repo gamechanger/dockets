@@ -21,7 +21,7 @@ class IsolationQueue(Queue):
 
 
     # TODO this should use Lua scripting
-    def push(self, data, **kwargs):
+    def push(self, item, **kwargs):
         """
         IsolationQueue.push needs to allocate its own pipeline, since
         it needs to do a watch. This has some implications on retries
@@ -29,9 +29,9 @@ class IsolationQueue(Queue):
         """
         if 'pipeline' in kwargs:
             # If we're being piped to or retrying
-            return super(IsolationQueue, self).push(data, **kwargs)
+            return super(IsolationQueue, self).push(item, **kwargs)
 
-        key = self.data_key(data)
+        key = self.item_key(item)
         with self.redis.pipeline() as pipeline:
             while True:
                 try:
@@ -40,21 +40,21 @@ class IsolationQueue(Queue):
                     pipeline.multi()
                     if key_in_queue:
                         pipeline.hset(self._latest_add_key(),
-                                      key, self._serialize(data))
+                                      key, self._serialize(item))
                     else:
-                        super(IsolationQueue, self).push(data, pipeline=pipeline)
+                        super(IsolationQueue, self).push(item, pipeline=pipeline)
                         pipeline.sadd(self._entry_set_key(), key)
                     pipeline.execute()
                     break
                 except WatchError:
                     continue
 
-    def complete(self, item, *args, **kwargs):
+    def complete(self, envelope, *args, **kwargs):
         """
         Complete is also not quite atomic, since we need to do a
         watch.
         """
-        key = self.data_key(item['data'])
+        key = self.item_key(envelope['item'])
         with self.redis.pipeline() as pipeline:
             while True:
                 try:
@@ -72,7 +72,7 @@ class IsolationQueue(Queue):
                     break
                 except WatchError:
                     continue
-        super(IsolationQueue, self).complete(item, *args, **kwargs)
+        super(IsolationQueue, self).complete(envelope, *args, **kwargs)
 
 
     # key names
@@ -86,5 +86,5 @@ class IsolationQueue(Queue):
 
 class TestIsolationQueue(IsolationQueue):
 
-    def process_data(self, data):
-        logging.info('in process_data, processing {}'.format(data))
+    def process_item(self, item):
+        logging.info('in process_item, processing {}'.format(item))
