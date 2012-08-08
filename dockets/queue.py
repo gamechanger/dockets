@@ -7,6 +7,7 @@ import time
 from dockets import errors
 from dockets.pipeline import PipelineObject
 from dockets.metadata import WorkerMetadataRecorder, RateTracker, TimeTracker
+from dockets.json_serializer import JsonSerializer
 FIFO = 'FIFO'
 LIFO = 'LIFO'
 
@@ -34,8 +35,7 @@ class Queue(PipelineObject):
         self.version = kwargs.get('version', 1)
 
         self._activity_timeout = kwargs.get('timeout', 60)
-        self._loads_kwargs = kwargs.get('loads_kwargs', {})
-        self._dumps_kwargs = kwargs.get('dumps_kwargs', {})
+        self._serializer = kwargs.get('serializer', JsonSerializer())
 
         _error_tracker_size = kwargs.get('error_tracker_size', 50)
         _retry_tracker_size = kwargs.get('retry_tracker_size',50)
@@ -90,7 +90,7 @@ class Queue(PipelineObject):
             serialized_envelope = self.redis.rpoplpush(*args)
         if not serialized_envelope:
             return None
-        envelope = self._deserialize(serialized_envelope)
+        envelope = self._serializer.deserialize(serialized_envelope)
         self._record_worker_activity(worker_id, pipeline=pipeline)
         self._response_time_tracker.add_time(time.time()-float(envelope['ts']),
                                              pipeline=pipeline)
@@ -104,7 +104,7 @@ class Queue(PipelineObject):
                     'item': item,
                     'v': self.version,
                     'ttl': ttl}
-        serialized_envelope = self._serialize(envelope)
+        serialized_envelope = self._serializer.serialize(envelope)
         if self.mode == FIFO:
             pipeline.lpush(self._queue_key(), serialized_envelope)
         else:
@@ -114,7 +114,8 @@ class Queue(PipelineObject):
 
     @PipelineObject.with_pipeline
     def complete(self, envelope, worker_id, pipeline):
-        pipeline.lrem(self._working_queue_key(worker_id), self._serialize(envelope))
+        pipeline.lrem(self._working_queue_key(worker_id),
+                      self._serializer.serialize(envelope))
 
     def run(self, worker_id=None, extra_metadata={}):
         self.register_worker(worker_id, extra_metadata)
@@ -232,18 +233,6 @@ class Queue(PipelineObject):
 
     def _worker_activity_key(self, worker_id):
         return 'queue.{0}.{1}.active'.format(self.name, worker_id)
-
-    ## serialization
-
-    def _serialize(self, obj):
-        return json.dumps(obj, sort_keys=True, **self._dumps_kwargs)
-
-    def _deserialize(self, json_obj):
-        try:
-            obj = json.loads(json_obj, **self._loads_kwargs)
-        except:
-            raise SerializationError
-        return obj
 
     ## worker handling
 

@@ -40,7 +40,7 @@ class IsolationQueue(Queue):
                     pipeline.multi()
                     if key_in_queue:
                         pipeline.hset(self._latest_add_key(),
-                                      key, self._serialize(item))
+                                      key, self._serializer.serialize(item))
                     else:
                         super(IsolationQueue, self).push(item, pipeline=pipeline)
                         pipeline.sadd(self._entry_set_key(), key)
@@ -62,7 +62,7 @@ class IsolationQueue(Queue):
                     latest_version = pipeline.hget(self._latest_add_key(), key)
                     pipeline.multi()
                     if latest_version:
-                        latest_version = self._deserialize(latest_version)
+                        latest_version = self._serializer.deserialize(latest_version)
                         # we just call Queue.push since we know it's already in the queue
                         super(IsolationQueue, self).push(latest_version, pipeline=pipeline)
                         pipeline.hdel(self._latest_add_key(), key)
