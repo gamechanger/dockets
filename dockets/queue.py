@@ -26,6 +26,7 @@ class Queue(PipelineObject):
 
     def __init__(self, redis, name, **kwargs):
         super(Queue, self).__init__(redis)
+
         self.name = name
         self.mode = kwargs.get('mode', FIFO)
         assert self.mode in [FIFO, LIFO], 'Invalid mode'
@@ -99,10 +100,10 @@ class Queue(PipelineObject):
     @PipelineObject.with_pipeline
     def push(self, item, pipeline, first_ts=None, ttl=None):
         envelope = {'first_ts': first_ts or time.time(),
-                'ts': time.time(),
-                'item': item,
-                'v': self.version,
-                'ttl': ttl}
+                    'ts': time.time(),
+                    'item': item,
+                    'v': self.version,
+                    'ttl': ttl}
         serialized_envelope = self._serialize(envelope)
         if self.mode == FIFO:
             pipeline.lpush(self._queue_key(), serialized_envelope)
