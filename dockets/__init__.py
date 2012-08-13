@@ -1,2 +1,7 @@
 import logging
-logging.getLogger('dockets').addHandler(logging.NullHandler())
+
+class NullHandler(logging.Handler):
+    def emit(self, record):
+        pass
+
+logging.getLogger('dockets').addHandler(NullHandler())
