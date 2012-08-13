@@ -207,6 +207,11 @@ class Queue(PipelineObject):
             data[worker_id] = worker_metadata
         return data
 
+    def working(self):
+        return sum(self.redis.llen(self._working_queue_key(worker_id))
+                   for worker_id
+                   in self.redis.smembers(self._workers_set_key()))
+
     def queued(self):
         return self.redis.llen(self._queue_key())
 
