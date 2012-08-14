@@ -45,14 +45,14 @@ class Queue(PipelineObject):
         _response_time_tracker_size = kwargs.get('response_time_tracker_size', 100)
         _turnaround_time_tracker_size = kwargs.get('turnaround_time_tracker_size', 100)
 
-        self._error_tracker = RateTracker(self.redis, self.name, ERROR, _error_tracker_size)
-        self._retry_tracker = RateTracker(self.redis, self.name, RETRY, _error_tracker_size)
-        self._expire_tracker = RateTracker(self.redis, self.name, EXPIRE, _expire_tracker_size)
-        self._success_tracker = RateTracker(self.redis, self.name, SUCCESS, _success_tracker_size)
+        self._error_tracker = RateTracker(self.redis, self._queue_key(), ERROR, _error_tracker_size)
+        self._retry_tracker = RateTracker(self.redis, self._queue_key(), RETRY, _error_tracker_size)
+        self._expire_tracker = RateTracker(self.redis, self._queue_key(), EXPIRE, _expire_tracker_size)
+        self._success_tracker = RateTracker(self.redis, self._queue_key(), SUCCESS, _success_tracker_size)
 
 
-        self._response_time_tracker = TimeTracker(self.redis, self.name, 'response', _response_time_tracker_size)
-        self._turnaround_time_tracker = TimeTracker(self.redis, self.name, 'turnaround', _turnaround_time_tracker_size)
+        self._response_time_tracker = TimeTracker(self.redis, self._queue_key(), 'response', _response_time_tracker_size)
+        self._turnaround_time_tracker = TimeTracker(self.redis, self._queue_key(), 'turnaround', _turnaround_time_tracker_size)
 
         self._handlers = defaultdict(list)
 
@@ -127,7 +127,7 @@ class Queue(PipelineObject):
 
         # set up this worker
         worker_id = worker_id or uuid.uuid1()
-        worker_recorder = WorkerMetadataRecorder(self.redis, self.name,
+        worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
                                                  worker_id)
         worker_recorder.record_initial_metadata(extra_metadata)
         return worker_id
@@ -137,7 +137,7 @@ class Queue(PipelineObject):
         Run the queue for one step. Use blocking mode unless you can't
         (e.g. unit tests)
         """
-        worker_recorder = WorkerMetadataRecorder(self.redis, self.name,
+        worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
                                                  worker_id)
         # The Big Pipeline
         pipeline = self.redis.pipeline()
@@ -201,7 +201,7 @@ class Queue(PipelineObject):
     def active_worker_metadata(self):
         data = {}
         for worker_id in self.redis.smembers(self._workers_set_key()):
-            worker_metadata = WorkerMetadataRecorder(self.redis, self.name, worker_id).all_data()
+            worker_metadata = WorkerMetadataRecorder(self.redis, self._queue_key(), worker_id).all_data()
             worker_metadata['working'] = self.redis.llen(self._working_queue_key(worker_id))
             worker_metadata['active'] = self.redis.exists(self._worker_activity_key(worker_id))
             data[worker_id] = worker_metadata

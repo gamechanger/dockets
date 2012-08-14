@@ -29,7 +29,7 @@ class RateTracker(object):
 
     def __init__(self, redis, name, type, size):
         self.list = CappedList(redis,
-                               'queue.{0}.rate.{1}'.format(name, type),
+                               '{0}.rate.{1}'.format(name, type),
                                size)
 
     def count(self, pipeline=None, current_time=None):
@@ -46,7 +46,7 @@ class TimeTracker(object):
 
     def __init__(self, redis, name, type, size):
         self.list = CappedList(redis,
-                               'queue.{0}.time.{1}'.format(name, type),
+                               '{0}.time.{1}'.format(name, type),
                                size)
 
     def add_time(self, time, pipeline=None):
@@ -66,7 +66,7 @@ class WorkerMetadataRecorder(PipelineObject):
         self.name = name
 
     def _key_name(self):
-        return 'queue.{0}.{1}.metadata'.format(self.name, self.worker_id)
+        return '{0}.{1}.metadata'.format(self.name, self.worker_id)
 
     @PipelineObject.with_pipeline
     def record_initial_metadata(self, extra_metadata, pipeline):
