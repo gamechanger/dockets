@@ -5,6 +5,7 @@ from util import FakeRedisContext
 
 from dockets.queue import Queue
 from dockets.isolation_queue import IsolationQueue
+from dockets.docket import Docket
 from dockets.errors import RetryError, ExpiredError
 
 class TestQueue(Queue):
@@ -41,6 +42,24 @@ class TestIsolationQueue(IsolationQueue):
         if item['action'] == 'error':
             raise Exception(item['message'])
 
+class TestDocket(Docket):
+    def __init__(self, *args, **kwargs):
+        super(TestDocket, self).__init__(*args, **kwargs)
+        self.items_processed = []
+
+    def process_item(self, item):
+        if (not isinstance(item, dict) or 'action' not in item
+            or item['action'] == 'success'):
+            self.items_processed.append(item)
+            return
+        if item['action'] == 'retry':
+            raise RetryError
+        if item['action'] == 'expire':
+            raise ExpiredError
+        if item['action'] == 'error':
+            raise Exception(item['message'])
+
+
 class SingleQueueContext(FakeRedisContext):
     def __init__(self, *args, **kwargs):
         super(SingleQueueContext, self).__init__(*args, **kwargs)
@@ -61,6 +80,19 @@ class SingleIsolationQueueContext(FakeRedisContext):
 
     def use_redis(self, redis):
         queue = TestIsolationQueue(redis, 'test')
+        self.use_queue(queue)
+        return queue
+
+    def use_queue(self, queue):
+        raise NotImplementedError
+
+class SingleDocketContext(FakeRedisContext):
+    def __init__(self, *args, **kwargs):
+        super(SingleDocketContext, self).__init__(*args, **kwargs)
+        self.ignore('use_queue')
+
+    def use_redis(self, redis):
+        queue = TestDocket(redis, 'test')
         self.use_queue(queue)
         return queue
 
@@ -453,4 +485,7 @@ class BasicQueueVows(Vows.Context):
         pass
 
     class AnIsolationQueue(basic_queue_tests(SingleIsolationQueueContext)):
+        pass
+
+    class ADocket(basic_queue_tests(SingleDocketContext)):
         pass

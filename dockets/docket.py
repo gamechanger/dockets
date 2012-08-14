@@ -1,0 +1,108 @@
+import sys
+import logging
+import time
+from datetime import datetime
+from numbers import Number
+import uuid
+
+import dateutil.parser
+from redis import WatchError
+
+from dockets import errors
+from dockets.pipeline import PipelineObject
+from dockets.queue import Queue
+from dockets.json_serializer import JsonSerializer
+from dockets.metadata import TimeTracker
+
+class Docket(Queue):
+
+    def __init__(self, *args, **kwargs):
+        super(Docket, self).__init__(*args, **kwargs)
+        self._wait_time = kwargs.get('wait_time') or 60
+        _response_delay_tracker_size = kwargs.get('response_delay_tracker_size', 100)
+        _turnaround_delay_tracker_size = kwargs.get('turnaround_delay_tracker_size', 100)
+        self._response_delay_tracker = TimeTracker(self.redis, self._queue_key(), 'response', _response_delay_tracker_size)
+        self._turnaround_delay_tracker = TimeTracker(self.redis, self._queue_key(), 'turnaround', _turnaround_delay_tracker_size)
+
+    @PipelineObject.with_pipeline
+    def push(self, item, pipeline, when=None, envelope=None):
+        when = when or (envelope and envelope['when']) or time.time()
+        timestamp = self._get_timestamp(when)
+        envelope = {'when': timestamp,
+                    'ts': time.time(),
+                    'first_ts': time.time(),
+                    'item': item,
+                    'ttl': None,
+                    'v': 1}
+        pipeline.zadd(self._queue_key(),
+                      self._serializer.serialize(envelope),
+                      timestamp)
+
+    @PipelineObject.with_pipeline
+    def pop(self, worker_id, pipeline):
+        next_envelope = None
+        with self.redis.pipeline() as pop_pipeline:
+            while True:
+                try:
+                    pop_pipeline.watch(self._queue_key())
+                    try:
+                        next_envelope_json = pop_pipeline.zrange(self._queue_key(), 0, 1)[0]
+                        print 'hello'
+                    except IndexError:
+                        return None
+                    print 'hello2u'
+                    next_envelope = self._serializer.deserialize(next_envelope_json)
+                    if next_envelope['when'] > time.time():
+                        print next_envelope
+                        print time.time()
+                        return None
+                    print 'hello2u'
+                    pop_pipeline.zrem(self._queue_key(), next_envelope_json)
+                    pop_pipeline.lpush(self._working_queue_key(worker_id),
+                                       next_envelope_json)
+                    break
+                except WatchError:
+                    continue
+        print next_envelope
+        print 'a'
+        self._record_worker_activity(worker_id, pipeline=pipeline)
+        self._response_time_tracker.add_time(time.time()-float(next_envelope['ts']),
+                                             pipeline=pipeline)
+        self._response_delay_tracker.add_time(time.time()-float(next_envelope['when']),
+                                              pipeline=pipeline)
+        return next_envelope
+
+    @PipelineObject.with_pipeline
+    def complete(self, envelope, worker_id, pipeline):
+        super(Docket, self).complete(envelope, worker_id, pipeline=pipeline)
+        self._turnaround_delay_tracker.add_time(time.time()-float(envelope['when']),
+                                                pipeline=pipeline)
+
+    def run(self, worker_id=None, extra_metadata={}):
+        worker_id = self.register_worker(worker_id, extra_metadata)
+        while True:
+            if not self.run_once(worker_id):
+                time.sleep(self._wait_time)
+
+    def queued(self):
+        return self.redis.zcard(self._queue_key())
+
+    def queued_items(self):
+        return self.redis.zrevrange(self._queue_key(), 0, sys.maxint)
+
+    @staticmethod
+    def _get_timestamp(when):
+        try:
+            if isinstance(when, datetime):
+                return time.mktime(when.timetuple())
+            elif isinstance(when, basestring):
+                return dateutil.parser.parse(when)
+            else:
+                return float(when)
+        except:
+            raise TypeError('Invalid time specification', when)
+
+class TestDocket(Queue):
+    def process_item(self, item):
+        time.sleep(2)
+        logging.info('in process_item, processing {0}'.format(item))
