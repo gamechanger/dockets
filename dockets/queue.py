@@ -146,7 +146,7 @@ class Queue(PipelineObject):
 
         # if we time out
         if not envelope:
-            return
+            return None
 
         try:
             if envelope['ttl'] and (envelope['first_ts'] + envelope['ttl'] < time.time()):
@@ -176,6 +176,7 @@ class Queue(PipelineObject):
             self._turnaround_time_tracker.add_time(time.time()-float(envelope['first_ts']),
                                                    pipeline=pipeline)
             pipeline.execute()
+        return envelope
 
 
 
