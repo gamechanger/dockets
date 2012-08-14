@@ -113,14 +113,13 @@ class Queue(PipelineObject):
             pipeline.rpush(self._queue_key(), serialized_envelope)
         self.log(PUSH, envelope)
 
-
     @PipelineObject.with_pipeline
     def complete(self, envelope, worker_id, pipeline):
         pipeline.lrem(self._working_queue_key(worker_id),
                       self._serializer.serialize(envelope))
 
     def run(self, worker_id=None, extra_metadata={}):
-        self.register_worker(worker_id, extra_metadata)
+        worker_id = self.register_worker(worker_id, extra_metadata)
         while True:
             self.run_once(worker_id)
 
