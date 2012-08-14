@@ -99,8 +99,9 @@ class Queue(PipelineObject):
 
 
     @PipelineObject.with_pipeline
-    def push(self, item, pipeline, first_ts=None, ttl=None):
-        envelope = {'first_ts': first_ts or time.time(),
+    def push(self, item, pipeline, first_ts=None, ttl=None, envelope=None):
+        envelope = {'first_ts': first_ts or (envelope and envelope['first_ts'])
+                    or time.time(),
                     'ts': time.time(),
                     'item': item,
                     'v': self.version,
@@ -161,7 +162,7 @@ class Queue(PipelineObject):
             self.log(RETRY, envelope)
             worker_recorder.record_retry(pipeline=pipeline)
             # When we retry, first_ts stsys the same
-            self.push(envelope['item'], first_ts=envelope['first_ts'], pipeline=pipeline)
+            self.push(envelope['item'], pipeline=pipeline, envelope=envelope)
         except Exception as e:
             self.log(ERROR, envelope, error=True)
             self._error_tracker.count(pipeline=pipeline)
