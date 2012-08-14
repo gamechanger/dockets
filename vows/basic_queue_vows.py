@@ -112,11 +112,11 @@ def basic_queue_tests(context_class):
                 expect(queue.queued()).to_equal(1)
 
             def should_have_one_redis_entry(self, queue):
-                expect(queue.redis.llen('queue.test')).to_equal(1)
+                expect(queue.queued()).to_equal(1)
 
             class ThePushedEntry(queue_entry_checker({'a': 1})):
                 def topic(self, queue):
-                    return queue.redis.lindex('queue.test', 0)
+                    return queue.queued_items()[0]
 
         class WhenPushedToTwice(context_class):
 
@@ -128,15 +128,15 @@ def basic_queue_tests(context_class):
                 expect(queue.queued()).to_equal(2)
 
             def should_have_two_redis_entries(self, queue):
-                expect(queue.redis.llen('queue.test')).to_equal(2)
+                expect(queue.queued()).to_equal(2)
 
             class TheFirstPushedEntry(queue_entry_checker({'a': 1})):
                 def topic(self, queue):
-                    return queue.redis.lindex('queue.test', 1)
+                    return queue.queued_items()[1]
 
             class TheSecondPushedEntry(queue_entry_checker({'b': 2})):
                 def topic(self, queue):
-                    return queue.redis.lindex('queue.test', 0)
+                    return queue.queued_items()[0]
 
         class WhenPushedToOnceAndPoppedFromOnce(context_class):
 
@@ -148,7 +148,7 @@ def basic_queue_tests(context_class):
                 expect(queue.queued()).to_equal(0)
 
             def should_have_no_redis_entries(self, queue):
-                expect(queue.redis.llen('queue.test')).to_equal(0)
+                expect(queue.queued()).to_equal(0)
 
             class TheWorkerQueue(Vows.Context):
 
@@ -319,7 +319,7 @@ def basic_queue_tests(context_class):
 
             class ThePushedEntry(queue_entry_checker({'action': 'retry'})):
                 def topic(self, queue):
-                    return queue.redis.lindex('queue.test', 0)
+                    return queue.queued_items()[0]
 
             class TheWorkerMetadata(Vows.Context):
                 def topic(self, queue):

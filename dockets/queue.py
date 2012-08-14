@@ -1,3 +1,4 @@
+import sys
 import logging
 import uuid
 from collections import defaultdict
@@ -214,6 +215,9 @@ class Queue(PipelineObject):
 
     def queued(self):
         return self.redis.llen(self._queue_key())
+
+    def queued_items(self):
+        return self.redis.lrange(self._queue_key(), 0, sys.maxint)
 
     ## queueing fundamentals
 
