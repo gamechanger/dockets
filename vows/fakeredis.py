@@ -402,7 +402,10 @@ class FakeRedis(object):
         self._db.get(name, []).insert(index, value)
 
     def rpoplpush(self, src, dst):
-        el = self._db.get(src).pop()
+        try:
+            el = self._db.get(src).pop()
+        except IndexError:
+            return None
         try:
             self._db[dst].insert(0, el)
         except KeyError:
@@ -567,7 +570,7 @@ class FakeRedis(object):
 
     def smembers(self, name):
         "Return all members of the set ``name``"
-        return self._db.get(name, set())
+        return set(self._db.get(name, set()))
 
     def smove(self, src, dst, value):
         try:
