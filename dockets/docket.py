@@ -96,7 +96,7 @@ class Docket(Queue):
         for envelope_json in working_contents:
             envelope = self._serializer.deserialize(envelope_json)
             self.push(envelope['item'], envelope=envelope)
-        self.redis.delete(self._working_queue_key())
+        self.redis.delete(self._working_queue_key(worker_id))
 
 
     def run(self, worker_id=None, extra_metadata={}):
