@@ -164,6 +164,7 @@ class Queue(PipelineObject):
             self.push(envelope['item'], pipeline=pipeline, envelope=envelope)
         except Exception as e:
             self.log(ERROR, envelope, error=True)
+            self._handle_return_value(envelope, ERROR, pipeline)
             self._error_tracker.count(pipeline=pipeline)
             worker_recorder.record_error(pipeline=pipeline)
         else:
