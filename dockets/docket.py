@@ -25,7 +25,7 @@ class Docket(Queue):
         self._turnaround_delay_tracker = TimeTracker(self.redis, self._queue_key(), 'turnaround', _turnaround_delay_tracker_size)
 
     def _payload_key(self):
-        return '{0}.payload'
+        return '{0}.payload'.format(self._queue_key())
 
     @PipelineObject.with_pipeline
     def push(self, item, pipeline, when=None, envelope=None):
