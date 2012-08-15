@@ -24,6 +24,9 @@ class Docket(Queue):
         self._response_delay_tracker = TimeTracker(self.redis, self._queue_key(), 'response', _response_delay_tracker_size)
         self._turnaround_delay_tracker = TimeTracker(self.redis, self._queue_key(), 'turnaround', _turnaround_delay_tracker_size)
 
+    def _payload_key(self):
+        return '{0}.payload'
+
     @PipelineObject.with_pipeline
     def push(self, item, pipeline, when=None, envelope=None):
         when = when or (envelope and envelope['when']) or time.time()
@@ -34,8 +37,11 @@ class Docket(Queue):
                     'item': item,
                     'ttl': None,
                     'v': 1}
+        key = self.item_key(item)
+        pipeline.hset(self._payload_key(), key,
+                      self._serializer.serialize(envelope))
         pipeline.zadd(self._queue_key(),
-                      self._serializer.serialize(envelope),
+                      key,
                       timestamp)
 
     @PipelineObject.with_pipeline
@@ -46,25 +52,23 @@ class Docket(Queue):
                 try:
                     pop_pipeline.watch(self._queue_key())
                     try:
-                        next_envelope_json = pop_pipeline.zrange(self._queue_key(), 0, 1)[0]
-                        print 'hello'
+                        next_envelope_key = pop_pipeline.zrange(self._queue_key(), 0, 1)[0]
                     except IndexError:
                         return None
-                    print 'hello2u'
+                    next_envelope_json = pop_pipeline.hget(self._payload_key(),
+                                                           next_envelope_key)
                     next_envelope = self._serializer.deserialize(next_envelope_json)
                     if next_envelope['when'] > time.time():
-                        print next_envelope
-                        print time.time()
                         return None
-                    print 'hello2u'
-                    pop_pipeline.zrem(self._queue_key(), next_envelope_json)
+                    pop_pipeline.multi()
+                    pop_pipeline.zrem(self._queue_key(), next_envelope_key)
+                    pop_pipeline.hdel(self._payload_key(), next_envelope_key)
                     pop_pipeline.lpush(self._working_queue_key(worker_id),
                                        next_envelope_json)
+                    pop_pipeline.execute()
                     break
                 except WatchError:
                     continue
-        print next_envelope
-        print 'a'
         self._record_worker_activity(worker_id, pipeline=pipeline)
         self._response_time_tracker.add_time(time.time()-float(next_envelope['ts']),
                                              pipeline=pipeline)
@@ -72,11 +76,28 @@ class Docket(Queue):
                                               pipeline=pipeline)
         return next_envelope
 
+    def remove(self, item):
+        # can't use with_pipeline here because we need the return value
+        key = self.item_key(item)
+        with self.redis.pipeline() as pipeline:
+            pipeline.zrem(self._queue_key(), key)
+            pipeline.hdel(self._payload_key(), key)
+            return pipeline.execute()[0]
+
     @PipelineObject.with_pipeline
     def complete(self, envelope, worker_id, pipeline):
         super(Docket, self).complete(envelope, worker_id, pipeline=pipeline)
         self._turnaround_delay_tracker.add_time(time.time()-float(envelope['when']),
                                                 pipeline=pipeline)
+
+    def _reclaim_worker_queue(self, worker_id):
+        working_contents = self.redis.lrange(self._working_queue_key(worker_id),
+                                             0, sys.maxint)
+        for envelope_json in working_contents:
+            envelope = self._serializer.deserialize(envelope_json)
+            self.push(envelope['item'], envelope=envelope)
+        self.redis.delete(self._working_queue_key())
+
 
     def run(self, worker_id=None, extra_metadata={}):
         worker_id = self.register_worker(worker_id, extra_metadata)
@@ -88,7 +109,9 @@ class Docket(Queue):
         return self.redis.zcard(self._queue_key())
 
     def queued_items(self):
-        return self.redis.zrevrange(self._queue_key(), 0, sys.maxint)
+        return [self.redis.hget(self._payload_key(), key)
+                for key
+                in self.redis.zrevrange(self._queue_key(), 0, sys.maxint)]
 
     @staticmethod
     def _get_timestamp(when):
