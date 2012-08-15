@@ -477,6 +477,30 @@ def basic_queue_tests(context_class):
 
                 def should_not_contain_last_success_ts(self, topic):
                     expect(topic).Not.to_include('last_retry_ts')
+
+        class WhenPushedToOnceAndPoppedFromOnceAndReclaimed(context_class):
+            def use_queue(self, queue):
+                queue.push({'a': 1})
+                queue.pop(worker_id='test_worker')
+                queue._reclaim()
+
+            def should_be_empty(self, queue):
+                expect(queue.queued()).to_equal(0)
+
+        class WhenPushedToOnceAndPoppedFromOnceAndWorkerKeyUnsetAndReclaimed(context_class):
+            def use_queue(self, queue):
+                queue.push({'a': 1})
+                queue.pop(worker_id='test_worker')
+                queue.redis.delete(queue._worker_activity_key('test_worker'))
+                queue._reclaim()
+
+            def queued_should_be_one(self, queue):
+                expect(queue.queued()).to_equal(1)
+
+            class TheReclaimedEntry(queue_entry_checker({'a': 1})):
+                def topic(self, queue):
+                    return queue.queued_items()[0]
+
     return QueueTests
 
 @Vows.batch
