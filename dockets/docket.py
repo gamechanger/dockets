@@ -103,6 +103,7 @@ class Docket(Queue):
         worker_id = self.register_worker(worker_id, extra_metadata)
         while True:
             if not self.run_once(worker_id):
+                logging.info('No scheduled items. Sleeping for %s seconds' % self._wait_time)
                 time.sleep(self._wait_time)
 
     def queued(self):
