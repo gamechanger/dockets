@@ -45,7 +45,7 @@ class Docket(Queue):
                       timestamp)
 
     @PipelineObject.with_pipeline
-    def pop(self, worker_id, pipeline):
+    def pop(self, worker_id, pipeline, current_time=None):
         next_envelope = None
         with self.redis.pipeline() as pop_pipeline:
             while True:
@@ -58,7 +58,7 @@ class Docket(Queue):
                     next_envelope_json = pop_pipeline.hget(self._payload_key(),
                                                            next_envelope_key)
                     next_envelope = self._serializer.deserialize(next_envelope_json)
-                    if next_envelope['when'] > time.time():
+                    if next_envelope['when'] > (current_time or time.time()):
                         return None
                     pop_pipeline.multi()
                     pop_pipeline.zrem(self._queue_key(), next_envelope_key)
