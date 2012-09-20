@@ -115,8 +115,10 @@ class Queue(PipelineObject):
 
     @PipelineObject.with_pipeline
     def complete(self, envelope, worker_id, pipeline):
-        pipeline.lrem(self._working_queue_key(worker_id),
-                      self._serializer.serialize(envelope))
+        """
+        Basic queue complete doesn't use the envelope--we always just lpop
+        """
+        pipeline.lpop(self._working_queue_key(worker_id))
 
     def run(self, worker_id=None, extra_metadata={}):
         worker_id = self.register_worker(worker_id, extra_metadata)
