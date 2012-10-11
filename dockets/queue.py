@@ -21,6 +21,10 @@ ERROR = 'error'
 RETRY = 'retry'
 PUSH = 'push'
 
+# Operation errors
+SERIALIZATION = 'serialization'
+DESERIALIZATION = 'deserialization'
+
 class Queue(PipelineObject):
     """
     Basic queue that does no entry tracking
@@ -73,6 +77,10 @@ class Queue(PipelineObject):
         logger.info('{0} {1} {2}'.format(self.name, event.capitalize(),
                                          self.item_key(envelope['item'])))
 
+    def log_operation_error(self, error, extra):
+        logger.error('Operation Error ({0}): {1}'.format(error.capitalize(), extra),
+                     exc_info=True)
+
     def item_key(self, item):
         if self.key:
             return '_'.join(str(item.get(key_component, ''))
@@ -91,7 +99,12 @@ class Queue(PipelineObject):
             serialized_envelope = self.redis.rpoplpush(*args)
         if not serialized_envelope:
             return None
-        envelope = self._serializer.deserialize(serialized_envelope)
+        try:
+            envelope = self._serializer.deserialize(serialized_envelope)
+        except:
+            self.log_operation_error(DESERIALIZATION, serialized_envelope)
+            self.raw_complete(serialized_envelope, worker_id)
+            return None
         self._record_worker_activity(worker_id, pipeline=pipeline)
         self._response_time_tracker.add_time(time.time()-float(envelope['ts']),
                                              pipeline=pipeline)
@@ -119,6 +132,14 @@ class Queue(PipelineObject):
         Basic queue complete doesn't use the envelope--we always just lpop
         """
         pipeline.lpop(self._working_queue_key(worker_id))
+
+    @PipelineObject.with_pipeline
+    def raw_complete(self, serialized_envelope, worker_id, pipeline):
+        """
+        Just removes the envelope from working. Used in error-recovery
+        cases where we just want to bail out
+        """
+        pipeline.lrem(self._working_queue_key(worker_id), serialized_envelope)
 
     def run(self, worker_id=None, extra_metadata={}):
         worker_id = self.register_worker(worker_id, extra_metadata)

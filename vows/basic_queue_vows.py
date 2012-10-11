@@ -501,6 +501,27 @@ def basic_queue_tests(context_class):
                 def topic(self, queue):
                     return queue.queued_items()[0]
 
+        class WhenDeserializationErrorOccurs(context_class):
+            def use_queue(self, queue):
+                old_serializer = queue._serializer
+
+                class ErroringSerializer(object):
+                    def serialize(self, *args, **kwargs):
+                        return old_serializer.serialize(*args, **kwargs)
+                    def deserialize(self, *args, **kwargs):
+                        raise ValueError("I've made a huge mistake")
+
+                queue._serializer = ErroringSerializer()
+                queue.push({'a': 1})
+                queue.pop(worker_id='test_worker')
+
+            def should_be_empty(self, queue):
+                expect(queue.queued()).to_equal(0)
+
+            class TheWorkerQueue(Vows.Context):
+                def should_be_empty(self, queue):
+                    expect(queue.redis.llen('queue.test.test_worker.working')).to_equal(0)
+
     return QueueTests
 
 @Vows.batch
