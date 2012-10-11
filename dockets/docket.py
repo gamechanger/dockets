@@ -61,22 +61,24 @@ class Docket(Queue):
                     try:
                         next_envelope = self._serializer.deserialize(next_envelope_json)
                     except:
-                        self.log_operation_error(DESERIALIZATION, next_envelope_json)
-                        deserialization_failure = True
-                    if not deserialization_failure and next_envelope['when'] > (current_time or time.time()):
+                        # Operation error. Bail out.
+                        pop_pipeline.multi()
+                        pop_pipeline.zrem(self._queue_key(), next_envelope_key)
+                        pop_pipeline.hdel(self._payload_key(), next_envelope_key)
+                        pop_pipeline.execute()
+                        self.handle_operation_error(DESERIALIZATION, next_envelope_json)
+                        return None
+                    if next_envelope['when'] > (current_time or time.time()):
                         return None
                     pop_pipeline.multi()
                     pop_pipeline.zrem(self._queue_key(), next_envelope_key)
                     pop_pipeline.hdel(self._payload_key(), next_envelope_key)
-                    if not deserialization_failure:
-                        pop_pipeline.lpush(self._working_queue_key(worker_id),
-                                           next_envelope_json)
+                    pop_pipeline.lpush(self._working_queue_key(worker_id),
+                                       next_envelope_json)
                     pop_pipeline.execute()
                     break
                 except WatchError:
                     continue
-        if deserialization_failure:
-            return None
         self._record_worker_activity(worker_id, pipeline=pipeline)
         self._response_time_tracker.add_time(time.time()-float(next_envelope['ts']),
                                              pipeline=pipeline)

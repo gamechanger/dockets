@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 SUCCESS = 'success'
 EXPIRE = 'expire'
 ERROR = 'error'
+OPERATION_ERROR = 'operation-error'
 RETRY = 'retry'
 PUSH = 'push'
 
@@ -46,6 +47,7 @@ class Queue(PipelineObject):
         _retry_tracker_size = kwargs.get('retry_tracker_size',50)
         _expire_tracker_size = kwargs.get('expire_tracker_size',50)
         _success_tracker_size = kwargs.get('success_tracker_size', 100)
+        _operation_error_tracker_size = kwargs.get('operation_error_tracker_size', 50)
 
         _response_time_tracker_size = kwargs.get('response_time_tracker_size', 100)
         _turnaround_time_tracker_size = kwargs.get('turnaround_time_tracker_size', 100)
@@ -54,6 +56,8 @@ class Queue(PipelineObject):
         self._retry_tracker = RateTracker(self.redis, self._queue_key(), RETRY, _error_tracker_size)
         self._expire_tracker = RateTracker(self.redis, self._queue_key(), EXPIRE, _expire_tracker_size)
         self._success_tracker = RateTracker(self.redis, self._queue_key(), SUCCESS, _success_tracker_size)
+        self._operation_error_tracker = RateTracker(self.redis, self._queue_key(),
+                                                    OPERATION_ERROR, _operation_error_tracker_size)
 
 
         self._response_time_tracker = TimeTracker(self.redis, self._queue_key(), 'response', _response_time_tracker_size)
@@ -77,8 +81,18 @@ class Queue(PipelineObject):
         logger.info('{0} {1} {2}'.format(self.name, event.capitalize(),
                                          self.item_key(envelope['item'])))
 
-    def log_operation_error(self, error, extra):
-        logger.error('Operation Error ({0}): {1}'.format(error.capitalize(), extra),
+    def handle_operation_error(self, error, envelope=None):
+        """
+        This provides a hook for queues to deal with queue operation
+        errors such as deserialization failures. When this function is
+        called with an envelope, that envelope is guaranteed to be
+        entirely out of the queue.
+
+        The default is to log errors and drop the envelope on the
+        floor.
+        """
+        self._operation_error_tracker.count()
+        logger.error('Operation Error ({0}): {1}'.format(error.capitalize(), envelope),
                      exc_info=True)
 
     def item_key(self, item):
@@ -101,9 +115,9 @@ class Queue(PipelineObject):
             return None
         try:
             envelope = self._serializer.deserialize(serialized_envelope)
-        except:
-            self.log_operation_error(DESERIALIZATION, serialized_envelope)
+        except Exception as e:
             self.raw_complete(serialized_envelope, worker_id)
+            self.handle_operation_error(DESERIALIZATION, serialized_envelope)
             return None
         self._record_worker_activity(worker_id, pipeline=pipeline)
         self._response_time_tracker.add_time(time.time()-float(envelope['ts']),
@@ -217,6 +231,9 @@ class Queue(PipelineObject):
 
     def retry_rate(self):
         return self._retry_tracker.rate()
+
+    def operation_error_rate(self):
+        return self._operation_error_tracker.rate()
 
     def response_time(self):
         return self._response_time_tracker.average_time()
