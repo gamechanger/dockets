@@ -437,7 +437,10 @@ class FakeRedis(object):
                 return (key, self._db[key].pop())
 
     def brpoplpush(self, src, dst, timeout=0):
-        el = self._db.get(src).pop()
+        try:
+            el = self._db.get(src).pop()
+        except IndexError:
+            return None
         try:
             self._db[dst].insert(0, el)
         except KeyError:
