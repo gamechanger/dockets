@@ -5,8 +5,22 @@ from util import FakeRedisContext
 
 from dockets.queue import Queue
 from dockets.isolation_queue import IsolationQueue
+from dockets.batching_queue import BatchingQueue, BatchingIsolationQueue
 from dockets.docket import Docket
 from dockets.errors import RetryError, ExpiredError
+
+def default_process_item(obj, item):
+    if (not isinstance(item, dict) or 'action' not in item
+        or item['action'] == 'success'):
+        obj.items_processed.append(item)
+        return
+    if item['action'] == 'retry':
+        raise RetryError
+    if item['action'] == 'expire':
+        raise ExpiredError
+    if item['action'] == 'error':
+        raise Exception(item['message'])
+
 
 class TestQueue(Queue):
     def __init__(self, *args, **kwargs):
@@ -14,16 +28,7 @@ class TestQueue(Queue):
         self.items_processed = []
 
     def process_item(self, item):
-        if (not isinstance(item, dict) or 'action' not in item
-            or item['action'] == 'success'):
-            self.items_processed.append(item)
-            return
-        if item['action'] == 'retry':
-            raise RetryError
-        if item['action'] == 'expire':
-            raise ExpiredError
-        if item['action'] == 'error':
-            raise Exception(item['message'])
+        default_process_item(self, item)
 
 class TestIsolationQueue(IsolationQueue):
     def __init__(self, *args, **kwargs):
@@ -31,16 +36,25 @@ class TestIsolationQueue(IsolationQueue):
         self.items_processed = []
 
     def process_item(self, item):
-        if (not isinstance(item, dict) or 'action' not in item
-            or item['action'] == 'success'):
-            self.items_processed.append(item)
-            return
-        if item['action'] == 'retry':
-            raise RetryError
-        if item['action'] == 'expire':
-            raise ExpiredError
-        if item['action'] == 'error':
-            raise Exception(item['message'])
+        default_process_item(self, item)
+
+class TestBatchingQueue(BatchingQueue):
+    def __init__(self, *args, **kwargs):
+        kwargs['batch_size'] = 1
+        super(TestBatchingQueue, self).__init__(*args, **kwargs)
+        self.items_processed = []
+
+    def process_item(self, item):
+        default_process_item(self, item)
+
+class TestBatchingIsolationQueue(BatchingIsolationQueue):
+    def __init__(self, *args, **kwargs):
+        kwargs['batch_size'] = 1
+        super(TestBatchingIsolationQueue, self).__init__(*args, **kwargs)
+        self.items_processed = []
+
+    def process_item(self, item):
+        default_process_item(self, item)
 
 class TestDocket(Docket):
     def __init__(self, *args, **kwargs):
@@ -48,56 +62,24 @@ class TestDocket(Docket):
         self.items_processed = []
 
     def process_item(self, item):
-        if (not isinstance(item, dict) or 'action' not in item
-            or item['action'] == 'success'):
-            self.items_processed.append(item)
-            return
-        if item['action'] == 'retry':
-            raise RetryError
-        if item['action'] == 'expire':
-            raise ExpiredError
-        if item['action'] == 'error':
-            raise Exception(item['message'])
+        default_process_item(self, item)
 
+def single_queue_context(queue_class):
+    class SingleQueueContext(FakeRedisContext):
+        def __init__(self, *args, **kwargs):
+            super(SingleQueueContext, self).__init__(*args, **kwargs)
+            self.ignore('use_queue')
 
-class SingleQueueContext(FakeRedisContext):
-    def __init__(self, *args, **kwargs):
-        super(SingleQueueContext, self).__init__(*args, **kwargs)
-        self.ignore('use_queue')
+        def use_redis(self, redis):
+            queue = queue_class(redis, 'test')
+            self.use_queue(queue)
+            return queue
 
-    def use_redis(self, redis):
-        queue = TestQueue(redis, 'test')
-        self.use_queue(queue)
-        return queue
+        def use_queue(self, queue):
+            raise NotImplementedError
 
-    def use_queue(self, queue):
-        raise NotImplementedError
+    return SingleQueueContext
 
-class SingleIsolationQueueContext(FakeRedisContext):
-    def __init__(self, *args, **kwargs):
-        super(SingleIsolationQueueContext, self).__init__(*args, **kwargs)
-        self.ignore('use_queue')
-
-    def use_redis(self, redis):
-        queue = TestIsolationQueue(redis, 'test')
-        self.use_queue(queue)
-        return queue
-
-    def use_queue(self, queue):
-        raise NotImplementedError
-
-class SingleDocketContext(FakeRedisContext):
-    def __init__(self, *args, **kwargs):
-        super(SingleDocketContext, self).__init__(*args, **kwargs)
-        self.ignore('use_queue')
-
-    def use_redis(self, redis):
-        queue = TestDocket(redis, 'test')
-        self.use_queue(queue)
-        return queue
-
-    def use_queue(self, queue):
-        raise NotImplementedError
 
 def queue_entry_checker(entry_value):
     class TheEntry(Vows.Context):
@@ -526,11 +508,17 @@ def basic_queue_tests(context_class):
 
 @Vows.batch
 class BasicQueueVows(Vows.Context):
-    class ABaseQueue(basic_queue_tests(SingleQueueContext)):
+    class ABaseQueue(basic_queue_tests(single_queue_context(TestQueue))):
         pass
 
-    class AnIsolationQueue(basic_queue_tests(SingleIsolationQueueContext)):
+    class AnIsolationQueue(basic_queue_tests(single_queue_context(TestIsolationQueue))):
         pass
 
-    class ADocket(basic_queue_tests(SingleDocketContext)):
+    class ABatchingQueue(basic_queue_tests(single_queue_context(TestBatchingQueue))):
+        pass
+
+    class ABatchingIsolationQueue(basic_queue_tests(single_queue_context(TestBatchingIsolationQueue))):
+        pass
+
+    class ADocket(basic_queue_tests(single_queue_context(TestDocket))):
         pass
