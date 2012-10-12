@@ -9,34 +9,35 @@ from dockets import errors
 from dockets.pipeline import PipelineObject
 from dockets.metadata import WorkerMetadataRecorder, RateTracker, TimeTracker
 from dockets.json_serializer import JsonSerializer
-FIFO = 'FIFO'
-LIFO = 'LIFO'
 
 logger = logging.getLogger(__name__)
-
-# Queue events
-SUCCESS = 'success'
-EXPIRE = 'expire'
-ERROR = 'error'
-OPERATION_ERROR = 'operation-error'
-RETRY = 'retry'
-PUSH = 'push'
-
-# Operation errors
-SERIALIZATION = 'serialization'
-DESERIALIZATION = 'deserialization'
 
 class Queue(PipelineObject):
     """
     Basic queue that does no entry tracking
     """
 
+    FIFO = 'FIFO'
+    LIFO = 'LIFO'
+
+    # Queue events
+    SUCCESS = 'success'
+    EXPIRE = 'expire'
+    ERROR = 'error'
+    OPERATION_ERROR = 'operation-error'
+    RETRY = 'retry'
+    PUSH = 'push'
+
+    # Operation errors
+    SERIALIZATION = 'serialization'
+    DESERIALIZATION = 'deserialization'
+
     def __init__(self, redis, name, **kwargs):
         super(Queue, self).__init__(redis)
 
         self.name = name
-        self.mode = kwargs.get('mode', FIFO)
-        assert self.mode in [FIFO, LIFO], 'Invalid mode'
+        self.mode = kwargs.get('mode', self.FIFO)
+        assert self.mode in [self.FIFO, self.LIFO], 'Invalid mode'
         self.key = kwargs.get('key')
         self.version = kwargs.get('version', 1)
 
@@ -52,12 +53,12 @@ class Queue(PipelineObject):
         _response_time_tracker_size = kwargs.get('response_time_tracker_size', 100)
         _turnaround_time_tracker_size = kwargs.get('turnaround_time_tracker_size', 100)
 
-        self._error_tracker = RateTracker(self.redis, self._queue_key(), ERROR, _error_tracker_size)
-        self._retry_tracker = RateTracker(self.redis, self._queue_key(), RETRY, _error_tracker_size)
-        self._expire_tracker = RateTracker(self.redis, self._queue_key(), EXPIRE, _expire_tracker_size)
-        self._success_tracker = RateTracker(self.redis, self._queue_key(), SUCCESS, _success_tracker_size)
+        self._error_tracker = RateTracker(self.redis, self._queue_key(), self.ERROR, _error_tracker_size)
+        self._retry_tracker = RateTracker(self.redis, self._queue_key(), self.RETRY, _error_tracker_size)
+        self._expire_tracker = RateTracker(self.redis, self._queue_key(), self.EXPIRE, _expire_tracker_size)
+        self._success_tracker = RateTracker(self.redis, self._queue_key(), self.SUCCESS, _success_tracker_size)
         self._operation_error_tracker = RateTracker(self.redis, self._queue_key(),
-                                                    OPERATION_ERROR, _operation_error_tracker_size)
+                                                    self.OPERATION_ERROR, _operation_error_tracker_size)
 
 
         self._response_time_tracker = TimeTracker(self.redis, self._queue_key(), 'response', _response_time_tracker_size)
@@ -105,8 +106,10 @@ class Queue(PipelineObject):
     ## public methods
 
     @PipelineObject.with_pipeline
-    def pop(self, worker_id, pipeline, blocking=True):
+    def pop(self, worker_id, pipeline, blocking=True, timeout=None):
         args = [self._queue_key(), self._working_queue_key(worker_id)]
+        if timeout:
+            args.append(timeout)
         if blocking:
             serialized_envelope = self.redis.brpoplpush(*args)
         else:
@@ -117,7 +120,7 @@ class Queue(PipelineObject):
             envelope = self._serializer.deserialize(serialized_envelope)
         except Exception as e:
             self.raw_complete(serialized_envelope, worker_id)
-            self.handle_operation_error(DESERIALIZATION, serialized_envelope)
+            self.handle_operation_error(self.DESERIALIZATION, serialized_envelope)
             return None
         self._record_worker_activity(worker_id, pipeline=pipeline)
         self._response_time_tracker.add_time(time.time()-float(envelope['ts']),
@@ -134,11 +137,11 @@ class Queue(PipelineObject):
                     'v': self.version,
                     'ttl': ttl}
         serialized_envelope = self._serializer.serialize(envelope)
-        if self.mode == FIFO:
+        if self.mode == self.FIFO:
             pipeline.lpush(self._queue_key(), serialized_envelope)
         else:
             pipeline.rpush(self._queue_key(), serialized_envelope)
-        self.log(PUSH, envelope)
+        self.log(self.PUSH, envelope)
 
     @PipelineObject.with_pipeline
     def complete(self, envelope, worker_id, pipeline):
@@ -191,21 +194,21 @@ class Queue(PipelineObject):
             return_value = self.process_item(envelope['item'])
         except errors.ExpiredError:
             self._expire_tracker.count(pipeline=pipeline)
-            self.log(EXPIRE, envelope)
+            self.log(self.EXPIRE, envelope)
             worker_recorder.record_expire(pipeline=pipeline)
         except errors.RetryError:
             self._retry_tracker.count(pipeline=pipeline)
-            self.log(RETRY, envelope)
+            self.log(self.RETRY, envelope)
             worker_recorder.record_retry(pipeline=pipeline)
             # When we retry, first_ts stsys the same
             self.push(envelope['item'], pipeline=pipeline, envelope=envelope)
         except Exception as e:
-            self.log(ERROR, envelope, error=True)
-            self._handle_return_value(envelope, ERROR, pipeline)
+            self.log(self.ERROR, envelope, error=True)
+            self._handle_return_value(envelope, self.ERROR, pipeline)
             self._error_tracker.count(pipeline=pipeline)
             worker_recorder.record_error(pipeline=pipeline)
         else:
-            self.log(SUCCESS, envelope)
+            self.log(self.SUCCESS, envelope)
             self._handle_return_value(envelope, return_value, pipeline)
             self._success_tracker.count(pipeline=pipeline)
             worker_recorder.record_success(pipeline=pipeline)
