@@ -315,6 +315,24 @@ class Queue(PipelineObject):
                                    self._queue_key()):
             continue
 
+# For backwards compatibility, put constants at module-level as well.
+FIFO = Queue.FIFO
+LIFO = Queue.LIFO
+
+# Queue events
+SUCCESS = Queue.SUCCESS
+EXPIRE = Queue.EXPIRE
+ERROR = Queue.ERROR
+OPERATION_ERROR = Queue.OPERATION_ERROR
+RETRY = Queue.RETRY
+PUSH = Queue.PUSH
+
+# Operation errors
+SERIALIZATION = Queue.SERIALIZATION
+DESERIALIZATION = Queue.DESERIALIZATION
+
+
+
 class TestQueue(Queue):
     def process_item(self, item):
         time.sleep(2)
