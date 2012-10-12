@@ -10,7 +10,7 @@ from redis import WatchError
 
 from dockets import errors
 from dockets.pipeline import PipelineObject
-from dockets.queue import Queue, DESERIALIZATION
+from dockets.queue import Queue
 from dockets.json_serializer import JsonSerializer
 from dockets.metadata import TimeTracker
 
@@ -66,7 +66,7 @@ class Docket(Queue):
                         pop_pipeline.zrem(self._queue_key(), next_envelope_key)
                         pop_pipeline.hdel(self._payload_key(), next_envelope_key)
                         pop_pipeline.execute()
-                        self.handle_operation_error(DESERIALIZATION, next_envelope_json)
+                        self.handle_operation_error(self.DESERIALIZATION, next_envelope_json)
                         return None
                     if next_envelope['when'] > (current_time or time.time()):
                         return None
