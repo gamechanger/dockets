@@ -106,8 +106,10 @@ class Queue(PipelineObject):
     ## public methods
 
     @PipelineObject.with_pipeline
-    def pop(self, worker_id, pipeline, blocking=True):
+    def pop(self, worker_id, pipeline, blocking=True, timeout=None):
         args = [self._queue_key(), self._working_queue_key(worker_id)]
+        if timeout:
+            args.append(timeout)
         if blocking:
             serialized_envelope = self.redis.brpoplpush(*args)
         else:
