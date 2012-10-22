@@ -76,14 +76,12 @@ def create_batching_queue(superclass):
                                                    item_key=self.item_key(envelope['item']),
                                                    pipeline=pipeline)
                     worker_recorder.record_error(pipeline=pipeline)
-                    self._handle_return_value(envelope, self.ERROR, pipeline)
             else:
                 for envelope in envelopes_to_process:
                     self._event_registrar.on_success(item=envelope['item'],
                                                      item_key=self.item_key(envelope['item']),
                                                      pipeline=pipeline)
                     worker_recorder.record_success(pipeline=pipeline)
-                    self._handle_return_value(envelope, return_value, pipeline)
             finally:
                 for envelope in envelopes:
                     self.complete(envelope, worker_id, pipeline=pipeline)

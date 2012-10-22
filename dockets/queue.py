@@ -51,8 +51,6 @@ class Queue(PipelineObject):
         self.add_event_handler(LoggingEventHandler())
         self.add_event_handler(RedisTrackingEventHandler())
 
-        self._handlers = defaultdict(list)
-
     ## abstract methods
     def process_item(self, item):
         """
@@ -177,12 +175,10 @@ class Queue(PipelineObject):
         except Exception as e:
             self._event_registrar.on_error(item=item, item_key=self.item_key(item),
                                            pipeline=pipeline, exc_info=sys.exc_info())
-            self._handle_return_value(envelope, self.ERROR, pipeline)
             worker_recorder.record_error(pipeline=pipeline)
         else:
             self._event_registrar.on_success(item=item, item_key=self.item_key(item),
                                              pipeline=pipeline)
-            self._handle_return_value(envelope, return_value, pipeline)
             worker_recorder.record_success(pipeline=pipeline)
         finally:
             self.complete(envelope, worker_id, pipeline=pipeline)
@@ -198,9 +194,6 @@ class Queue(PipelineObject):
 
     def add_event_handler(self, handler):
         self._event_registrar.register(handler)
-
-    def add_return_handler(self, return_value, handler):
-        self._handlers[return_value].append(handler)
 
     ## reporting
 
@@ -223,16 +216,6 @@ class Queue(PipelineObject):
 
     def queued_items(self):
         return self.redis.lrange(self._queue_key(), 0, sys.maxint)
-
-    ## queueing fundamentals
-
-    def _handle_return_value(self, envelope, value, pipeline):
-        item = envelope['item']
-        key = self.item_key(item)
-        first_ts = envelope['first_ts']
-        for handler in self._handlers.get(value, []):
-            handler(item, first_ts=first_ts, pipeline=pipeline, redis=self.redis,
-                    value=value, key=key)
 
     ## names of keys in redis
 
