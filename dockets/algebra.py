@@ -4,7 +4,7 @@ from redis import WatchError
 def queue_pipe(queue_in, queue_out, return_value=None):
     def handler(item, pipeline, **kwargs):
         queue_out.push(item, pipeline=pipeline)
-    queue_in.add_handler(return_value, handler)
+    queue_in.add_return_handler(return_value, handler)
 
 
 def queue_and(queues, queue_out, key_function=None, timeout=60*15):
@@ -51,6 +51,6 @@ def queue_and(queues, queue_out, key_function=None, timeout=60*15):
         set_value = queue_spec.get('set')
         unset_value = queue_spec.get('unset')
 
-        queue.add_handler(set_value, make_set_handler(i))
+        queue.add_return_handler(set_value, make_set_handler(i))
         if unset_value:
-            queue.add_handler(unset_value, make_unset_handler(i))
+            queue.add_return_handler(unset_value, make_unset_handler(i))

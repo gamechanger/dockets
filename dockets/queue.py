@@ -220,8 +220,7 @@ class Queue(PipelineObject):
         return envelope
 
 
-
-    def add_handler(self, return_value, handler):
+    def add_return_handler(self, return_value, handler):
         self._handlers[return_value].append(handler)
 
     ## reporting
