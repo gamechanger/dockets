@@ -2,6 +2,8 @@ from pyvows import Vows, expect
 from mock import Mock
 
 from dockets.queue_event_registrar import QueueEventRegistrar
+from dockets.queue import Queue
+import dockets
 
 class QueueEventRegistrarContext(Vows.Context):
     def __init__(self, *args, **kwargs):
@@ -75,3 +77,16 @@ class AQueueEventRegistar(Vows.Context):
 
         def should_not_call_handler_methods(self, topic):
             expect(topic._handlers[0].mock_calls).to_length(1)
+
+
+@Vows.batch
+class TestGlobalHandlerRegistered(Vows.Context):
+    def topic(self):
+        handler = Mock()
+        return handler
+
+    def should_register_globals(self, handler):
+        dockets.add_global_event_handler(handler)
+        queue = Queue(Mock(), 'test')
+        dockets.clear_global_event_handlers()
+        handler.on_register.assert_called_once_with(queue)

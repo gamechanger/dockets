@@ -1,17 +1,13 @@
 import sys
 import logging
 import uuid
-from collections import defaultdict
-import simplejson as json
 import time
 
-from dockets import errors
+from dockets import errors, _global_event_handlers
 from dockets.pipeline import PipelineObject
-from dockets.metadata import WorkerMetadataRecorder, RateTracker, TimeTracker
+from dockets.metadata import WorkerMetadataRecorder
 from dockets.json_serializer import JsonSerializer
 from dockets.queue_event_registrar import QueueEventRegistrar
-from dockets.logging_event_handler import LoggingEventHandler
-from dockets.redis_tracking_event_handler import RedisTrackingEventHandler
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +44,9 @@ class Queue(PipelineObject):
         self._serializer = kwargs.get('serializer', JsonSerializer())
 
         self._event_registrar = QueueEventRegistrar(self)
-        self.add_event_handler(LoggingEventHandler())
-        self.add_event_handler(RedisTrackingEventHandler())
+
+        for handler in _global_event_handlers:
+            self.add_event_handler(handler)
 
     ## abstract methods
     def process_item(self, item):

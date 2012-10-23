@@ -16,5 +16,5 @@ setuptools.setup(
     url="http://github.com/gamechanger/dockets",
     packages=["dockets"],
     long_description="LONG",
-    install_requires=['simplejson','redis']
+    install_requires=['simplejson','redis','python-dateutil']
     )
