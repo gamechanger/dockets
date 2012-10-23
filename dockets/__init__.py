@@ -5,3 +5,9 @@ class NullHandler(logging.Handler):
         pass
 
 logging.getLogger('dockets').addHandler(NullHandler())
+
+
+_global_event_handlers = []
+
+def add_global_event_handler(handler):
+    _global_event_handlers.append(handler)
