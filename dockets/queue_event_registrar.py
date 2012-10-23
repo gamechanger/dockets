@@ -6,12 +6,6 @@ class QueueEventRegistrar(object):
         self._queue = queue
         self._handlers = []
 
-    def register(self, handler):
-        """Registers a handler to receive events."""
-        if handler not in self._handlers:
-            self._handlers.append(handler)
-            handler.on_register(self._queue)
-
         self.create_proxy_method('on_pop')
         self.create_proxy_method('on_reclaim')
         self.create_proxy_method('on_push')
@@ -21,6 +15,12 @@ class QueueEventRegistrar(object):
         self.create_proxy_method('on_retry')
         self.create_proxy_method('on_expire')
         self.create_proxy_method('on_operation_error')
+
+    def register(self, handler):
+        """Registers a handler to receive events."""
+        if handler not in self._handlers:
+            self._handlers.append(handler)
+            handler.on_register(self._queue)
 
     def create_proxy_method(self, name):
         def proxy_method(*args, **kwargs):
