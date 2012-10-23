@@ -9,6 +9,9 @@ from dockets import errors
 from dockets.pipeline import PipelineObject
 from dockets.metadata import WorkerMetadataRecorder, RateTracker, TimeTracker
 from dockets.json_serializer import JsonSerializer
+from dockets.queue_event_registrar import QueueEventRegistrar
+from dockets.logging_event_handler import LoggingEventHandler
+from dockets.redis_tracking_event_handler import RedisTrackingEventHandler
 
 logger = logging.getLogger(__name__)
 
@@ -44,27 +47,9 @@ class Queue(PipelineObject):
         self._activity_timeout = kwargs.get('timeout', 60)
         self._serializer = kwargs.get('serializer', JsonSerializer())
 
-        _error_tracker_size = kwargs.get('error_tracker_size', 50)
-        _retry_tracker_size = kwargs.get('retry_tracker_size',50)
-        _expire_tracker_size = kwargs.get('expire_tracker_size',50)
-        _success_tracker_size = kwargs.get('success_tracker_size', 100)
-        _operation_error_tracker_size = kwargs.get('operation_error_tracker_size', 50)
-
-        _response_time_tracker_size = kwargs.get('response_time_tracker_size', 100)
-        _turnaround_time_tracker_size = kwargs.get('turnaround_time_tracker_size', 100)
-
-        self._error_tracker = RateTracker(self.redis, self._queue_key(), self.ERROR, _error_tracker_size)
-        self._retry_tracker = RateTracker(self.redis, self._queue_key(), self.RETRY, _error_tracker_size)
-        self._expire_tracker = RateTracker(self.redis, self._queue_key(), self.EXPIRE, _expire_tracker_size)
-        self._success_tracker = RateTracker(self.redis, self._queue_key(), self.SUCCESS, _success_tracker_size)
-        self._operation_error_tracker = RateTracker(self.redis, self._queue_key(),
-                                                    self.OPERATION_ERROR, _operation_error_tracker_size)
-
-
-        self._response_time_tracker = TimeTracker(self.redis, self._queue_key(), 'response', _response_time_tracker_size)
-        self._turnaround_time_tracker = TimeTracker(self.redis, self._queue_key(), 'turnaround', _turnaround_time_tracker_size)
-
-        self._handlers = defaultdict(list)
+        self._event_registrar = QueueEventRegistrar(self)
+        self.add_event_handler(LoggingEventHandler())
+        self.add_event_handler(RedisTrackingEventHandler())
 
     ## abstract methods
     def process_item(self, item):
@@ -72,29 +57,6 @@ class Queue(PipelineObject):
         Override this in subclasses.
         """
         raise NotImplementedError
-
-    def log(self, event, envelope, error=False):
-        if error:
-            logger.error('{0} {1} {2}'.format(self.name,
-                                              event.capitalize(),
-                                              self.item_key(envelope['item'])),
-                         exc_info=True)
-        logger.info('{0} {1} {2}'.format(self.name, event.capitalize(),
-                                         self.item_key(envelope['item'])))
-
-    def handle_operation_error(self, error, envelope=None):
-        """
-        This provides a hook for queues to deal with queue operation
-        errors such as deserialization failures. When this function is
-        called with an envelope, that envelope is guaranteed to be
-        entirely out of the queue.
-
-        The default is to log errors and drop the envelope on the
-        floor.
-        """
-        self._operation_error_tracker.count()
-        logger.error('Operation Error ({0}): {1}'.format(error.capitalize(), envelope),
-                     exc_info=True)
 
     def item_key(self, item):
         if self.key:
@@ -120,11 +82,10 @@ class Queue(PipelineObject):
             envelope = self._serializer.deserialize(serialized_envelope)
         except Exception as e:
             self.raw_complete(serialized_envelope, worker_id)
-            self.handle_operation_error(self.DESERIALIZATION, serialized_envelope)
+            self._event_registrar.on_operation_error(exc_info=sys.exc_info(),
+                                                     pipeline=pipeline)
             return None
         self._record_worker_activity(worker_id, pipeline=pipeline)
-        self._response_time_tracker.add_time(time.time()-float(envelope['ts']),
-                                             pipeline=pipeline)
         return envelope
 
 
@@ -141,7 +102,9 @@ class Queue(PipelineObject):
             pipeline.lpush(self._queue_key(), serialized_envelope)
         else:
             pipeline.rpush(self._queue_key(), serialized_envelope)
-        self.log(self.PUSH, envelope)
+        self._event_registrar.on_push(item=item, item_key=self.item_key(item),
+                                      pipeline=pipeline)
+
 
     @PipelineObject.with_pipeline
     def complete(self, envelope, worker_id, pipeline):
@@ -188,61 +151,51 @@ class Queue(PipelineObject):
         if not envelope:
             return None
 
+        item = envelope['item']
+        pop_time = time.time()
+        response_time = pop_time - float(envelope['first_ts'])
+        self._event_registrar.on_pop(item=item, item_key=self.item_key(item),
+                                     response_time=response_time,
+                                     pipeline=pipeline)
+
         try:
             if envelope['ttl'] and (envelope['first_ts'] + envelope['ttl'] < time.time()):
                 raise errors.ExpiredError
             return_value = self.process_item(envelope['item'])
         except errors.ExpiredError:
-            self._expire_tracker.count(pipeline=pipeline)
-            self.log(self.EXPIRE, envelope)
+            self._event_registrar.on_expire(item=item, item_key=self.item_key(item),
+                                            pipeline=pipeline)
             worker_recorder.record_expire(pipeline=pipeline)
         except errors.RetryError:
-            self._retry_tracker.count(pipeline=pipeline)
-            self.log(self.RETRY, envelope)
+            self._event_registrar.on_retry(item=item, item_key=self.item_key(item),
+                                           pipeline=pipeline)
             worker_recorder.record_retry(pipeline=pipeline)
             # When we retry, first_ts stsys the same
             self.push(envelope['item'], pipeline=pipeline, envelope=envelope)
         except Exception as e:
-            self.log(self.ERROR, envelope, error=True)
-            self._handle_return_value(envelope, self.ERROR, pipeline)
-            self._error_tracker.count(pipeline=pipeline)
+            self._event_registrar.on_error(item=item, item_key=self.item_key(item),
+                                           pipeline=pipeline, exc_info=sys.exc_info())
             worker_recorder.record_error(pipeline=pipeline)
         else:
-            self.log(self.SUCCESS, envelope)
-            self._handle_return_value(envelope, return_value, pipeline)
-            self._success_tracker.count(pipeline=pipeline)
+            self._event_registrar.on_success(item=item, item_key=self.item_key(item),
+                                             pipeline=pipeline)
             worker_recorder.record_success(pipeline=pipeline)
         finally:
             self.complete(envelope, worker_id, pipeline=pipeline)
-            self._turnaround_time_tracker.add_time(time.time()-float(envelope['first_ts']),
-                                                   pipeline=pipeline)
+            complete_time = time.time()
+            turnaround_time = complete_time - float(envelope['first_ts'])
+            processing_time = complete_time - pop_time
+            self._event_registrar.on_complete(item=item, item_key=self.item_key(item),
+                                              turnaround_time=turnaround_time,
+                                              processing_time=processing_time,
+                                              pipeline=pipeline)
             pipeline.execute()
         return envelope
 
-
-
-    def add_handler(self, return_value, handler):
-        self._handlers[return_value].append(handler)
+    def add_event_handler(self, handler):
+        self._event_registrar.register(handler)
 
     ## reporting
-
-    def error_rate(self):
-        return self._error_tracker.rate()
-
-    def success_rate(self):
-        return self._success_tracker.rate()
-
-    def retry_rate(self):
-        return self._retry_tracker.rate()
-
-    def operation_error_rate(self):
-        return self._operation_error_tracker.rate()
-
-    def response_time(self):
-        return self._response_time_tracker.average_time()
-
-    def turnaround_time(self):
-        return self._turnaround_time_tracker.average_time()
 
     def active_worker_metadata(self):
         data = {}
@@ -263,16 +216,6 @@ class Queue(PipelineObject):
 
     def queued_items(self):
         return self.redis.lrange(self._queue_key(), 0, sys.maxint)
-
-    ## queueing fundamentals
-
-    def _handle_return_value(self, envelope, value, pipeline):
-        item = envelope['item']
-        key = self.item_key(item)
-        first_ts = envelope['first_ts']
-        for handler in self._handlers.get(value, []):
-            handler(item, first_ts=first_ts, pipeline=pipeline, redis=self.redis,
-                    value=value, key=key)
 
     ## names of keys in redis
 

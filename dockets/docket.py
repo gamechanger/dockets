@@ -19,10 +19,6 @@ class Docket(Queue):
     def __init__(self, *args, **kwargs):
         super(Docket, self).__init__(*args, **kwargs)
         self._wait_time = kwargs.get('wait_time') or 60
-        _response_delay_tracker_size = kwargs.get('response_delay_tracker_size', 100)
-        _turnaround_delay_tracker_size = kwargs.get('turnaround_delay_tracker_size', 100)
-        self._response_delay_tracker = TimeTracker(self.redis, self._queue_key(), 'response', _response_delay_tracker_size)
-        self._turnaround_delay_tracker = TimeTracker(self.redis, self._queue_key(), 'turnaround', _turnaround_delay_tracker_size)
 
     def _payload_key(self):
         return '{0}.payload'.format(self._queue_key())
@@ -66,7 +62,8 @@ class Docket(Queue):
                         pop_pipeline.zrem(self._queue_key(), next_envelope_key)
                         pop_pipeline.hdel(self._payload_key(), next_envelope_key)
                         pop_pipeline.execute()
-                        self.handle_operation_error(self.DESERIALIZATION, next_envelope_json)
+                        self._event_registrar.on_operation_error(exc_info=sys.exc_info(),
+                                                                 pipeline=pipeline)
                         return None
                     if next_envelope['when'] > (current_time or time.time()):
                         return None
@@ -80,10 +77,6 @@ class Docket(Queue):
                 except WatchError:
                     continue
         self._record_worker_activity(worker_id, pipeline=pipeline)
-        self._response_time_tracker.add_time(time.time()-float(next_envelope['ts']),
-                                             pipeline=pipeline)
-        self._response_delay_tracker.add_time(time.time()-float(next_envelope['when']),
-                                              pipeline=pipeline)
         return next_envelope
 
     def remove(self, item):
@@ -97,8 +90,6 @@ class Docket(Queue):
     @PipelineObject.with_pipeline
     def complete(self, envelope, worker_id, pipeline):
         super(Docket, self).complete(envelope, worker_id, pipeline=pipeline)
-        self._turnaround_delay_tracker.add_time(time.time()-float(envelope['when']),
-                                                pipeline=pipeline)
 
     def _reclaim_worker_queue(self, worker_id):
         working_contents = self.redis.lrange(self._working_queue_key(worker_id),
