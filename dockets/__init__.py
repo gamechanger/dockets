@@ -1,4 +1,6 @@
 import logging
+from dockets.logging_event_handler import LoggingEventHandler
+from dockets.redis_tracking_event_handler import RedisTrackingEventHandler
 
 class NullHandler(logging.Handler):
     def emit(self, record):
@@ -14,3 +16,6 @@ def add_global_event_handler(handler):
 
 def clear_global_event_handlers():
     del _global_event_handlers[:]
+
+add_global_event_handler(LoggingEventHandler())
+add_global_event_handler(RedisTrackingEventHandler())
