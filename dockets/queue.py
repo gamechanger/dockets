@@ -1,15 +1,13 @@
 import sys
 import logging
 import uuid
-from collections import defaultdict
-import simplejson as json
 import time
 
 from dockets import errors, _global_event_handlers
 from dockets.pipeline import PipelineObject
-from dockets.metadata import WorkerMetadataRecorder, RateTracker, TimeTracker
+from dockets.metadata import WorkerMetadataRecorder
 from dockets.json_serializer import JsonSerializer
-from dockets.event_registrar import QueueEventRegistrar
+from dockets.queue_event_registrar import QueueEventRegistrar
 from dockets.logging_event_handler import LoggingEventHandler
 from dockets.redis_tracking_event_handler import RedisTrackingEventHandler
 
