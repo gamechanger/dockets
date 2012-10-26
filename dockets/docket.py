@@ -85,6 +85,8 @@ class Docket(Queue):
         with self.redis.pipeline() as pipeline:
             pipeline.zrem(self._queue_key(), key)
             pipeline.hdel(self._payload_key(), key)
+            self._event_registrar.on_remove(item=item, item_key=key,
+                pipeline=pipeline)
             return pipeline.execute()[0]
 
     @PipelineObject.with_pipeline
