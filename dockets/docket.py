@@ -39,6 +39,7 @@ class Docket(Queue):
         pipeline.zadd(self._queue_key(),
                       key,
                       timestamp)
+        self._event_registrar.on_push(item=item, item_key=key, pipeline=pipeline)
 
     @PipelineObject.with_pipeline
     def pop(self, worker_id, pipeline, current_time=None):
