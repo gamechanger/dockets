@@ -3,7 +3,7 @@ import logging
 import uuid
 import time
 
-from dockets import errors, _global_event_handlers
+from dockets import errors, _global_event_handler_classes
 from dockets.pipeline import PipelineObject
 from dockets.metadata import WorkerMetadataRecorder
 from dockets.json_serializer import JsonSerializer
@@ -45,8 +45,8 @@ class Queue(PipelineObject):
 
         self._event_registrar = QueueEventRegistrar(self)
 
-        for handler in _global_event_handlers:
-            self.add_event_handler(handler)
+        for handler_class in _global_event_handler_classes:
+            self.add_event_handler(handler_class())
 
     ## abstract methods
     def process_item(self, item):

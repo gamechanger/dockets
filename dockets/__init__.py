@@ -9,13 +9,13 @@ class NullHandler(logging.Handler):
 logging.getLogger('dockets').addHandler(NullHandler())
 
 
-_global_event_handlers = []
+_global_event_handler_classes = []
 
-def add_global_event_handler(handler):
-    _global_event_handlers.append(handler)
+def add_global_event_handler(handler_class):
+    _global_event_handler_classes.append(handler_class)
 
 def clear_global_event_handlers():
-    del _global_event_handlers[:]
+    del _global_event_handler_classes[:]
 
-add_global_event_handler(LoggingEventHandler())
-add_global_event_handler(RedisTrackingEventHandler())
+add_global_event_handler(LoggingEventHandler)
+add_global_event_handler(RedisTrackingEventHandler)

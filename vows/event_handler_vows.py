@@ -89,4 +89,4 @@ class TestGlobalHandlerRegistered(Vows.Context):
         dockets.add_global_event_handler(handler)
         queue = Queue(Mock(), 'test')
         dockets.clear_global_event_handlers()
-        handler.on_register.assert_called_once_with(queue)
+        handler().on_register.assert_called_once_with(queue)
