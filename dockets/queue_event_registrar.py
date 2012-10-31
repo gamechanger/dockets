@@ -21,7 +21,8 @@ class QueueEventRegistrar(object):
         """Registers a handler to receive events."""
         if handler not in self._handlers:
             self._handlers.append(handler)
-            handler.on_register(self._queue)
+            if hasattr(hander, 'on_register'):
+                handler.on_register(self._queue)
 
     def create_proxy_method(self, name):
         def proxy_method(*args, **kwargs):
