@@ -488,8 +488,10 @@ class FakeRedis(object):
         Set ``key`` to ``value`` within hash ``name``
         Returns 1 if HSET created a new field, otherwise 0
         """
-        self._db.setdefault(name, {})[key] = value
-        return 1
+        hash = self._db.setdefault(name, {})
+        return_value = 0 if key in hash else 1
+        hash[key] = value
+        return return_value
 
     def hsetnx(self, name, key, value):
         """
