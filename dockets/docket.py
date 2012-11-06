@@ -23,8 +23,11 @@ class Docket(Queue):
     def _payload_key(self):
         return '{0}.payload'.format(self._queue_key())
 
-    @PipelineObject.with_pipeline
-    def push(self, item, pipeline, when=None, envelope=None):
+    def push(self, item, pipeline=None, when=None, envelope=None):
+        passed_pipeline = True
+        if not pipeline:
+            passed_pipeline = False
+            pipeline = self.redis.pipeline()
         when = when or (envelope and envelope['when']) or time.time()
         timestamp = self._get_timestamp(when)
         envelope = {'when': timestamp,
@@ -36,10 +39,17 @@ class Docket(Queue):
         key = self.item_key(item)
         pipeline.hset(self._payload_key(), key,
                       self._serializer.serialize(envelope))
-        pipeline.zadd(self._queue_key(),
-                      key,
-                      timestamp)
+        n_added = pipeline.zadd(self._queue_key(),
+                                key,
+                                timestamp)
         self._event_registrar.on_push(item=item, item_key=key, pipeline=pipeline)
+        if passed_pipeline:
+            return None
+        return_values = pipeline.execute()
+        was_new_item = return_values[0] #this is the hset
+        return was_new_item
+
+
 
     @PipelineObject.with_pipeline
     def pop(self, worker_id, pipeline, current_time=None):
