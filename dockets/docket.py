@@ -118,6 +118,11 @@ class Docket(Queue):
                 for key
                 in self.redis.zrevrange(self._queue_key(), 0, sys.maxint)]
 
+    def is_scheduled(self, item):
+        key = self.item_key(item)
+        return self.redis.hexists(self._payload_key(), key)
+
+
     @staticmethod
     def _get_timestamp(when):
         try:

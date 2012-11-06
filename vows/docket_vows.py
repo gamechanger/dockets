@@ -51,6 +51,9 @@ class ADocket(Vows.Context):
         def should_be_empty(self, queue):
             expect(queue.queued()).to_equal(0)
 
+        def is_scheduled_should_be_false(self, queue):
+            expect(queue.is_scheduled({'a': 1})).to_be_false()
+
     class WhenPushedToOnceAndPoppedFromBeforeTime(DocketWithKeyContext):
         def use_queue(self, queue):
             queue.push({'a': 1}, when=2)
@@ -58,3 +61,6 @@ class ADocket(Vows.Context):
 
         def queued_should_be_one(self, queue):
             expect(queue.queued()).to_equal(1)
+
+        def is_scheduled_should_be_true(self, queue):
+            expect(queue.is_scheduled({'a': 1})).to_be_true()
