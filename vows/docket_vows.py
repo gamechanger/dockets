@@ -51,6 +51,13 @@ class ADocket(Vows.Context):
         def should_be_empty(self, queue):
             expect(queue.queued()).to_equal(0)
 
+        class WhenPushedToAgain(Vows.Context):
+            def topic(self, queue):
+                return queue.push({'a': 1})
+
+            def push_should_return_true(self, topic):
+                expect(topic).to_be_true()
+
     class WhenPushedToOnceAndPoppedFromBeforeTime(DocketWithKeyContext):
         def use_queue(self, queue):
             queue.push({'a': 1}, when=2)
@@ -58,3 +65,10 @@ class ADocket(Vows.Context):
 
         def queued_should_be_one(self, queue):
             expect(queue.queued()).to_equal(1)
+
+        class WhenPushedToAgain(Vows.Context):
+            def topic(self, queue):
+                return queue.push({'a': 1})
+
+            def push_should_return_false(self, topic):
+                expect(topic).to_be_false()
