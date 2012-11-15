@@ -110,7 +110,6 @@ class Queue(PipelineObject):
         """
         pipeline.lpop(self._working_queue_key(worker_id))
 
-
     @PipelineObject.with_pipeline
     def raw_complete(self, serialized_envelope, worker_id, pipeline):
         """
@@ -187,7 +186,6 @@ class Queue(PipelineObject):
                                               turnaround_time=turnaround_time,
                                               processing_time=processing_time,
                                               pipeline=pipeline)
-            pipeline.set(self._queue_last_ran_key(), time.time())
             pipeline.execute()
         return envelope
 
@@ -216,18 +214,10 @@ class Queue(PipelineObject):
     def queued_items(self):
         return self.redis.lrange(self._queue_key(), 0, sys.maxint)
 
-    def last_ran(self):
-        """Returns the epoch time indicating when the queue processor last 
-        ran to process an item."""
-        return self.redis.get(self._queue_last_ran_key())
-
     ## names of keys in redis
 
     def _queue_key(self):
         return 'queue.{0}'.format(self.name)
-
-    def _queue_last_ran_key(self):
-        return 'queue.{0}.last_ran'.format(self.name)
 
     def _workers_set_key(self):
         return 'queue.{0}.workers'.format(self.name)
@@ -237,7 +227,6 @@ class Queue(PipelineObject):
 
     def _worker_activity_key(self, worker_id):
         return 'queue.{0}.{1}.active'.format(self.name, worker_id)
-
 
     ## worker handling
 
