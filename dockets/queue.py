@@ -8,6 +8,7 @@ from dockets.pipeline import PipelineObject
 from dockets.metadata import WorkerMetadataRecorder
 from dockets.json_serializer import JsonSerializer
 from dockets.queue_event_registrar import QueueEventRegistrar
+from dockets.stat_gatherer import StatGatherer
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class Queue(PipelineObject):
     SERIALIZATION = 'serialization'
     DESERIALIZATION = 'deserialization'
 
-    def __init__(self, redis, name, **kwargs):
+    def __init__(self, redis, name, stat_gatherer_cls=StatGatherer, **kwargs):
         super(Queue, self).__init__(redis)
 
         self.name = name
@@ -43,10 +44,20 @@ class Queue(PipelineObject):
         self._activity_timeout = kwargs.get('timeout', 60)
         self._serializer = kwargs.get('serializer', JsonSerializer())
 
+        # register event handlers
         self._event_registrar = QueueEventRegistrar(self)
-
         for handler_class in _global_event_handler_classes:
             self.add_event_handler(handler_class())
+
+        if stat_gatherer_cls is not None:
+            self.stat_gatherer = stat_gatherer_cls()
+            self.add_event_handler(self.stat_gatherer)
+
+    @property
+    def stats(self):
+        if not hasattr(self, "stat_gatherer"):
+            raise AttributeError("Stats are not enabled on this queue.")
+        return self.stat_gatherer
 
     ## abstract methods
     def process_item(self, item):
