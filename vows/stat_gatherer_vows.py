@@ -27,7 +27,7 @@ class AQueue(Vows.Context):
 @Vows.batch
 class AQueueWithStatsDisabled(Vows.Context):
     def topic(self):
-        queue = Queue(redis, 'test', gather_stats=False)
+        queue = Queue(redis, 'test', stat_gatherer_cls=None)
         return queue.stats
 
     def should_refuse_to_provide_stats(self, exception):
@@ -37,14 +37,15 @@ class AQueueWithStatsDisabled(Vows.Context):
 class FakeGatherer(object):
     pass
 
+
 @Vows.batch
 class AQueueWithACustomStatGatherer(Vows.Context):
 
     def topic(self):
-        queue = Queue(redis, 'test', stat_gatherer=FakeGatherer)
+        queue = Queue(redis, 'test', stat_gatherer_cls=FakeGatherer)
         return queue
 
-    def should_refuse_to_provide_stats(self, queue):
+    def should_provide_stats(self, queue):
         expect(queue.stats).to_be_instance_of(FakeGatherer)
 
 

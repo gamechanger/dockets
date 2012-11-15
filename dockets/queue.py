@@ -32,11 +32,10 @@ class Queue(PipelineObject):
     SERIALIZATION = 'serialization'
     DESERIALIZATION = 'deserialization'
 
-    def __init__(self, redis, name, gather_stats=True, **kwargs):
+    def __init__(self, redis, name, stat_gatherer_cls=StatGatherer, **kwargs):
         super(Queue, self).__init__(redis)
 
         self.name = name
-        self.gather_stats = gather_stats
         self.mode = kwargs.get('mode', self.FIFO)
         assert self.mode in [self.FIFO, self.LIFO], 'Invalid mode'
         self.key = kwargs.get('key')
@@ -50,13 +49,13 @@ class Queue(PipelineObject):
         for handler_class in _global_event_handler_classes:
             self.add_event_handler(handler_class())
 
-        if gather_stats:
-            self.stat_gatherer = kwargs.get('stat_gatherer', StatGatherer)()
+        if stat_gatherer_cls is not None:
+            self.stat_gatherer = stat_gatherer_cls()
             self.add_event_handler(self.stat_gatherer)
 
     @property
     def stats(self):
-        if not self.gather_stats:
+        if not hasattr(self, "stat_gatherer"):
             raise AttributeError("Stats are not enabled on this queue.")
         return self.stat_gatherer
 
