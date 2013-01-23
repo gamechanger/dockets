@@ -15,11 +15,6 @@ from dockets.json_serializer import JsonSerializer
 from dockets.metadata import TimeTracker
 
 class Docket(Queue):
-
-    def __init__(self, *args, **kwargs):
-        super(Docket, self).__init__(*args, **kwargs)
-        self._wait_time = kwargs.get('wait_time') or 60
-
     def _payload_key(self):
         return '{0}.payload'.format(self._queue_key())
 
@@ -111,14 +106,6 @@ class Docket(Queue):
             envelope = self._serializer.deserialize(envelope_json)
             self.push(envelope['item'], envelope=envelope)
         self.redis.delete(self._working_queue_key(worker_id))
-
-
-    def run(self, worker_id=None, extra_metadata={}):
-        worker_id = self.register_worker(worker_id, extra_metadata)
-        while True:
-            if not self.run_once(worker_id):
-                logging.info('No scheduled items. Sleeping for %s seconds' % self._wait_time)
-                time.sleep(self._wait_time)
 
     def queued(self):
         return self.redis.zcard(self._queue_key())

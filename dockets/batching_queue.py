@@ -16,7 +16,6 @@ def create_batching_queue(superclass):
         """
 
         def __init__(self, *args, **kwargs):
-            self._batch_timeout = kwargs.get('batch_timeout') or 60
             self._batch_size = kwargs.get('batch_size') or 10
             super(BatchingQueue, self).__init__(*args, **kwargs)
 
@@ -31,7 +30,7 @@ def create_batching_queue(superclass):
             # The Big Pipeline
             pipeline = self.redis.pipeline()
             while len(envelopes) < self._batch_size:
-                envelope = self.pop(worker_id, pipeline=pipeline, timeout=self._batch_timeout)
+                envelope = self.pop(worker_id, pipeline=pipeline)
                 if not envelope:
                     break
                 envelope['pop_time'] = time.time()
