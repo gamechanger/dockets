@@ -403,7 +403,7 @@ class FakeRedis(object):
 
     def rpoplpush(self, src, dst):
         try:
-            el = self._db.get(src).pop()
+            el = self._db.get(src, []).pop()
         except IndexError:
             return None
         try:
