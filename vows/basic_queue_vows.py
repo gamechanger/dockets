@@ -117,6 +117,23 @@ def queue_entry_checker(entry_value):
 
 def basic_queue_tests(context_class):
     class QueueTests(Vows.Context):
+        class WhenRunOnceWithoutPushing(context_class):
+
+            def use_queue(self, queue):
+                queue.register_worker(worker_id='test_worker')
+                queue.run_once(worker_id='test_worker')
+
+            class TheWorkersActivityKey(Vows.Context):
+
+                def should_exist(self, queue):
+                    expect(queue.redis.exists('queue.test.test_worker.active')).to_be_true()
+
+            class TheWorkerSet(Vows.Context):
+
+                def should_contain_the_worker_id(self, queue):
+                    expect(queue.redis.sismember('queue.test.workers', 'test_worker'))
+
+
         class WhenPushedToOnce(context_class):
 
             def use_queue(self, queue):

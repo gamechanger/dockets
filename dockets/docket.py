@@ -49,6 +49,7 @@ class Docket(Queue):
     @PipelineObject.with_pipeline
     def pop(self, worker_id, pipeline, current_time=None):
         next_envelope = None
+        self._record_worker_activity(worker_id, pipeline=pipeline)
         with self.redis.pipeline() as pop_pipeline:
             while True:
                 try:
@@ -82,7 +83,6 @@ class Docket(Queue):
                     break
                 except WatchError:
                     continue
-        self._record_worker_activity(worker_id, pipeline=pipeline)
         return next_envelope
 
     def remove(self, item):

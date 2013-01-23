@@ -78,6 +78,7 @@ class Queue(PipelineObject):
 
     @PipelineObject.with_pipeline
     def pop(self, worker_id, pipeline):
+        self._record_worker_activity(worker_id, pipeline=pipeline)
         args = [self._queue_key(), self._working_queue_key(worker_id)]
         serialized_envelope = self.redis.rpoplpush(*args)
         if not serialized_envelope:
@@ -89,7 +90,6 @@ class Queue(PipelineObject):
             self._event_registrar.on_operation_error(exc_info=sys.exc_info(),
                                                      pipeline=pipeline)
             return None
-        self._record_worker_activity(worker_id, pipeline=pipeline)
         return envelope
 
 

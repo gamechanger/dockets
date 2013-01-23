@@ -41,6 +41,7 @@ def create_batching_queue(superclass):
                 envelopes.append(envelope)
 
             if not envelopes:
+                pipeline.execute()
                 return None
 
             # clear expired envelopes
