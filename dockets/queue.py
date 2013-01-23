@@ -143,8 +143,7 @@ class Queue(PipelineObject):
 
     def run_once(self, worker_id):
         """
-        Run the queue for one step. Use blocking mode unless you can't
-        (e.g. unit tests)
+        Run the queue for one step.
         """
         worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
                                                  worker_id)
