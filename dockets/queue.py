@@ -41,6 +41,7 @@ class Queue(PipelineObject):
         self.key = kwargs.get('key')
         self.version = kwargs.get('version', 1)
 
+        self._wait_time = kwargs.get('wait_time') or 60
         self._activity_timeout = kwargs.get('timeout', 60)
         self._serializer = kwargs.get('serializer', JsonSerializer())
 
@@ -76,14 +77,10 @@ class Queue(PipelineObject):
     ## public methods
 
     @PipelineObject.with_pipeline
-    def pop(self, worker_id, pipeline, blocking=True, timeout=None):
+    def pop(self, worker_id, pipeline):
+        self._record_worker_activity(worker_id, pipeline=pipeline)
         args = [self._queue_key(), self._working_queue_key(worker_id)]
-        if timeout:
-            args.append(timeout)
-        if blocking:
-            serialized_envelope = self.redis.brpoplpush(*args)
-        else:
-            serialized_envelope = self.redis.rpoplpush(*args)
+        serialized_envelope = self.redis.rpoplpush(*args)
         if not serialized_envelope:
             return None
         try:
@@ -93,7 +90,6 @@ class Queue(PipelineObject):
             self._event_registrar.on_operation_error(exc_info=sys.exc_info(),
                                                      pipeline=pipeline)
             return None
-        self._record_worker_activity(worker_id, pipeline=pipeline)
         return envelope
 
 
@@ -132,7 +128,8 @@ class Queue(PipelineObject):
     def run(self, worker_id=None, extra_metadata={}):
         worker_id = self.register_worker(worker_id, extra_metadata)
         while True:
-            self.run_once(worker_id)
+            if not self.run_once(worker_id):
+                time.sleep(self._wait_time)
 
     def register_worker(self, worker_id=None, extra_metadata={}):
         self._reclaim()
@@ -146,8 +143,7 @@ class Queue(PipelineObject):
 
     def run_once(self, worker_id):
         """
-        Run the queue for one step. Use blocking mode unless you can't
-        (e.g. unit tests)
+        Run the queue for one step.
         """
         worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
                                                  worker_id)
@@ -155,8 +151,9 @@ class Queue(PipelineObject):
         pipeline = self.redis.pipeline()
         envelope = self.pop(worker_id, pipeline=pipeline)
 
-        # if we time out
         if not envelope:
+            self._event_registrar.on_empty(pipeline=pipeline)
+            pipeline.execute()
             return None
 
         item = envelope['item']

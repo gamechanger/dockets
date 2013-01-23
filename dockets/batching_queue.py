@@ -16,14 +16,12 @@ def create_batching_queue(superclass):
         """
 
         def __init__(self, *args, **kwargs):
-            self._batch_timeout = kwargs.get('batch_timeout') or 60
             self._batch_size = kwargs.get('batch_size') or 10
             super(BatchingQueue, self).__init__(*args, **kwargs)
 
         def run_once(self, worker_id):
             """
-            Run the queue for one step. Use blocking mode unless you can't
-            (e.g. unit tests)
+            Run the queue for one step.
             """
             envelopes = []
             worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
@@ -31,7 +29,7 @@ def create_batching_queue(superclass):
             # The Big Pipeline
             pipeline = self.redis.pipeline()
             while len(envelopes) < self._batch_size:
-                envelope = self.pop(worker_id, pipeline=pipeline, timeout=self._batch_timeout)
+                envelope = self.pop(worker_id, pipeline=pipeline)
                 if not envelope:
                     break
                 envelope['pop_time'] = time.time()
@@ -43,6 +41,7 @@ def create_batching_queue(superclass):
                 envelopes.append(envelope)
 
             if not envelopes:
+                pipeline.execute()
                 return None
 
             # clear expired envelopes

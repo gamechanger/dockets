@@ -29,3 +29,6 @@ class LoggingEventHandler(object):
 
     def on_operation_error(self, exc_info=None, **kwargs):
         self.logger.error('{0}: Operation error'.format(self.queue.name), exc_info=exc_info)
+
+    def on_empty(self, **kwargs):
+        self.logger.info("{0} Empty. Sleeping.".format(self.queue.name))
