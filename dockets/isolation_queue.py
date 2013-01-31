@@ -35,15 +35,15 @@ class IsolationQueue(Queue):
         with self.redis.pipeline() as pipeline:
             while True:
                 try:
-                    pipeline.watch(self._entry_set_key())
-                    key_in_queue = pipeline.sismember(self._entry_set_key(), key)
+                    pipeline.watch(self._entry_key(key))
+                    key_in_queue = pipeline.get(self._entry_key(key))
                     pipeline.multi()
                     if key_in_queue:
                         pipeline.hset(self._latest_add_key(),
                                       key, self._serializer.serialize(item))
                     else:
                         super(IsolationQueue, self).push(item, pipeline=pipeline)
-                        pipeline.sadd(self._entry_set_key(), key)
+                        pipeline.set(self._entry_key(key), 1)
                     pipeline.execute()
                     break
                 except WatchError:
@@ -58,7 +58,7 @@ class IsolationQueue(Queue):
         with self.redis.pipeline() as pipeline:
             while True:
                 try:
-                    pipeline.watch(self._entry_set_key())
+                    pipeline.watch(self._entry_key(key))
                     latest_version = pipeline.hget(self._latest_add_key(), key)
                     pipeline.multi()
                     if latest_version:
@@ -67,7 +67,7 @@ class IsolationQueue(Queue):
                         super(IsolationQueue, self).push(latest_version, pipeline=pipeline)
                         pipeline.hdel(self._latest_add_key(), key)
                     else:
-                        pipeline.srem(self._entry_set_key(), key)
+                        pipeline.delete(self._entry_key(key), key)
                     pipeline.execute()
                     break
                 except WatchError:
@@ -77,8 +77,8 @@ class IsolationQueue(Queue):
 
     # key names
 
-    def _entry_set_key(self):
-        return 'queue.{0}.entries'.format(self.name)
+    def _entry_key(self, key):
+        return 'queue.{0}.entry.{1}'.format(self.name, key)
 
     def _latest_add_key(self):
         return 'queue.{0}.latest'.format(self.name)
