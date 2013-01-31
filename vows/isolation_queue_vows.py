@@ -53,12 +53,12 @@ class AnIsolationQueue(Vows.Context):
         def use_queue(self, queue):
             queue.push({'a': 1})
 
-        class TheEntrySet(Vows.Context):
+        class TheEntryKey(Vows.Context):
             def topic(self, queue):
-                return queue.redis.smembers('queue.test.entries')
+                return queue.redis.get('queue.test.entry.1')
 
-            def should_have_correct_entry(self, topic):
-                expect(topic).to_match_as_set(['1'])
+            def should_be_set(self, topic):
+                expect(topic).to_equal('1')
 
         class TheLatestAddKey(Vows.Context):
             def topic(self, queue):
@@ -72,12 +72,13 @@ class AnIsolationQueue(Vows.Context):
             queue.push({'a': 1})
             queue.push({'a': 2})
 
-        class TheEntrySet(Vows.Context):
+        class TheEntryKeys(Vows.Context):
             def topic(self, queue):
-                return queue.redis.smembers('queue.test.entries')
+                return [queue.redis.get('queue.test.entry.1'),
+                        queue.redis.get('queue.test.entry.2')]
 
-            def should_have_correct_entries(self, topic):
-                expect(topic).to_match_as_set(['1', '2'])
+            def should_be_set(self, topic):
+                expect(topic).to_match_as_set(['1', '1'])
 
         class TheLatestAddKey(Vows.Context):
             def topic(self, queue):
@@ -94,12 +95,12 @@ class AnIsolationQueue(Vows.Context):
         def should_have_one_entry(self, queue):
             expect(queue.queued()).to_equal(1)
 
-        class TheEntrySet(Vows.Context):
+        class TheEntryKey(Vows.Context):
             def topic(self, queue):
-                return queue.redis.smembers('queue.test.entries')
+                return queue.redis.get('queue.test.entry.1')
 
-            def should_have_correct_entry(self, topic):
-                expect(topic).to_match_as_set(['1'])
+            def should_be_set(self, topic):
+                expect(topic).to_equal('1')
 
         class TheLatestAddKey(Vows.Context):
             def topic(self, queue):
@@ -117,12 +118,12 @@ class AnIsolationQueue(Vows.Context):
         def should_have_one_entry(self, queue):
             expect(queue.queued()).to_equal(1)
 
-        class TheEntrySet(Vows.Context):
+        class TheEntryKey(Vows.Context):
             def topic(self, queue):
-                return queue.redis.smembers('queue.test.entries')
+                return queue.redis.get('queue.test.entry.1')
 
-            def should_have_correct_entry(self, topic):
-                expect(topic).to_match_as_set(['1'])
+            def should_be_set(self, topic):
+                expect(topic).to_equal('1')
 
         class TheLatestAddKey(Vows.Context):
             def topic(self, queue):
@@ -148,12 +149,12 @@ class AnIsolationQueue(Vows.Context):
         def should_be_empty(self, queue):
             expect(queue.queued()).to_equal(0)
 
-        class TheEntrySet(Vows.Context):
+        class TheEntryKey(Vows.Context):
             def topic(self, queue):
-                return queue.redis.smembers('queue.test.entries')
+                return queue.redis.get('queue.test.entry.1')
 
-            def should_be_empty(self, topic):
-                expect(topic).to_be_empty()
+            def should_not_be_set(self, topic):
+                expect(topic).to_be_null()
 
         class TheLatestAddKey(Vows.Context):
             def topic(self, queue):
