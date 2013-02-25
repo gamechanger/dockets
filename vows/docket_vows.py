@@ -72,3 +72,16 @@ class ADocket(Vows.Context):
 
             def push_should_return_false(self, topic):
                 expect(topic).to_be_false()
+
+    class WhenAnItemIsPushed(DocketWithKeyContext):
+        def use_queue(self, queue):
+            queue.push({'a': 7}, when=2)
+
+        def item_should_match_pushed(self, queue):
+            expect(queue.get_existing_item_for_item({'a': 7})).to_equal({'a': 7})
+
+        def item_should_only_match_self(self, queue):
+            expect(queue.get_existing_item_for_item({'a': 1})).to_equal(None)
+
+        def item_should_have_same_fire_time(self, queue):
+            expect(queue.get_fire_time({'a': 7})).to_equal(2)

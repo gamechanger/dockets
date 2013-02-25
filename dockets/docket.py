@@ -45,6 +45,17 @@ class Docket(Queue):
         return was_new_item
 
 
+    def get_existing_item_for_item(self, item):
+        key = self.item_key(item)
+        raw_payload = self.redis.hget(self._payload_key(), key)
+        return raw_payload and self._serializer.deserialize(raw_payload)['item']
+
+
+    def get_fire_time(self, item):
+        key = self.item_key(item)
+        raw_payload = self.redis.hget(self._payload_key(), key)
+        return raw_payload and self._serializer.deserialize(raw_payload)['when']
+
 
     @PipelineObject.with_pipeline
     def pop(self, worker_id, pipeline, current_time=None):
@@ -58,9 +69,11 @@ class Docket(Queue):
                         next_envelope_key = pop_pipeline.zrange(self._queue_key(), 0, 1)[0]
                     except IndexError:
                         return None
+
                     next_envelope_json = pop_pipeline.hget(self._payload_key(),
                                                            next_envelope_key)
                     deserialization_failure = False
+
                     try:
                         next_envelope = self._serializer.deserialize(next_envelope_json)
                     except:
@@ -72,6 +85,7 @@ class Docket(Queue):
                         self._event_registrar.on_operation_error(exc_info=sys.exc_info(),
                                                                  pipeline=pipeline)
                         return None
+
                     if next_envelope['when'] > (current_time or time.time()):
                         return None
                     pop_pipeline.multi()
