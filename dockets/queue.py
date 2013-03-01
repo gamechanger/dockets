@@ -195,7 +195,7 @@ class Queue(PipelineObject):
                                               processing_time=processing_time,
                                               pipeline=pipeline)
             pipeline.execute()
-        return envelope
+            return envelope
 
     def add_event_handler(self, handler):
         self._event_registrar.register(handler)
