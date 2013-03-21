@@ -86,7 +86,6 @@ class TestGlobalHandlerRegistered(Vows.Context):
         return handler
 
     def should_only_register_each_class_once(self, handler):
-        expect(handler).to_equal(handler)
         dockets.add_global_event_handler(handler)
         dockets.add_global_event_handler(handler)
         queue = Queue(Mock(), 'test')
