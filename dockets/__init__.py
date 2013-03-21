@@ -8,12 +8,12 @@ class NullHandler(logging.Handler):
 logging.getLogger('dockets').addHandler(NullHandler())
 
 
-_global_event_handler_classes = []
+_global_event_handler_classes = set()
 
 def add_global_event_handler(handler_class):
-    _global_event_handler_classes.append(handler_class)
+    _global_event_handler_classes.add(handler_class)
 
 def clear_global_event_handlers():
-    del _global_event_handler_classes[:]
+    _global_event_handler_classes.clear()
 
 add_global_event_handler(LoggingEventHandler)

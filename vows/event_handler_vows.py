@@ -85,7 +85,8 @@ class TestGlobalHandlerRegistered(Vows.Context):
         handler = Mock()
         return handler
 
-    def should_register_globals(self, handler):
+    def should_only_register_each_class_once(self, handler):
+        dockets.add_global_event_handler(handler)
         dockets.add_global_event_handler(handler)
         queue = Queue(Mock(), 'test')
         dockets.clear_global_event_handlers()
