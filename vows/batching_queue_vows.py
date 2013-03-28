@@ -6,7 +6,6 @@ from util import FakeRedisContext
 
 
 from dockets.batching_queue import BatchingQueue
-from dockets.errors import RetryError
 
 class TestSize10BatchingQueue(BatchingQueue):
     def __init__(self, *args, **kwargs):

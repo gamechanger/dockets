@@ -61,7 +61,7 @@ def create_batching_queue(superclass):
                                                     item_key=self.item_key(envelope['item']),
                                                     pipeline=pipeline)
                     worker_recorder.record_expire(pipeline=pipeline)
-            except errors.RetryError:
+            except tuple(self._retry_error_classes):
                 for envelope in envelopes_to_process:
                     self._event_registrar.on_retry(item=envelope['item'],
                                                    item_key=self.item_key(envelope['item']),
@@ -75,6 +75,7 @@ def create_batching_queue(superclass):
                                                    item_key=self.item_key(envelope['item']),
                                                    pipeline=pipeline)
                     worker_recorder.record_error(pipeline=pipeline)
+                    self.error_queue.queue_error(envelope)
             else:
                 for envelope in envelopes_to_process:
                     self._event_registrar.on_success(item=envelope['item'],
