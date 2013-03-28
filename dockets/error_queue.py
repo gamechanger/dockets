@@ -53,3 +53,23 @@ class ErrorQueue(PipelineObject):
 
     def _hash_key(self):
         return 'queue.{}.errors'.format(self.name)
+
+class DummyErrorQueue(object):
+    """
+    Use this instead of a real error queue if you don't want real queueing.
+    """
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def queue_error(self, *args, **kwargs):
+        pass
+
+    def requeue_error(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def errors(self):
+        return []
+
+    def length(self):
+        return 0

@@ -9,7 +9,7 @@ from dockets.metadata import WorkerMetadataRecorder
 from dockets.json_serializer import JsonSerializer
 from dockets.queue_event_registrar import QueueEventRegistrar
 from dockets.stat_gatherer import StatGatherer
-from dockets.error_queue import ErrorQueue
+from dockets.error_queue import ErrorQueue, DummyErrorQueue
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,9 @@ class Queue(PipelineObject):
 
         self._retry_error_classes = list(_global_retry_error_classes) + kwargs.get('retry_error_classes', [])
 
-        self.error_queue = ErrorQueue(self) if use_error_queue else None
+        self.error_queue = ErrorQueue(self) if use_error_queue else DummyErrorQueue(self)
+
+
 
     @property
     def stats(self):
@@ -186,8 +188,7 @@ class Queue(PipelineObject):
             self._event_registrar.on_error(item=item, item_key=self.item_key(item),
                                            pipeline=pipeline, exc_info=sys.exc_info())
             worker_recorder.record_error(pipeline=pipeline)
-            if self.error_queue:
-                self.error_queue.queue_error(envelope, pipeline=pipeline)
+            self.error_queue.queue_error(envelope, pipeline=pipeline)
         else:
             self._event_registrar.on_success(item=item, item_key=self.item_key(item),
                                              pipeline=pipeline)
