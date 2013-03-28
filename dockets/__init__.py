@@ -19,7 +19,7 @@ def clear_global_event_handlers():
 add_global_event_handler(LoggingEventHandler)
 
 
-_global_retry_error_classes = []
+_global_retry_error_classes = set()
 
 def add_global_retry_error_class(error_class):
     _global_retry_error_classes.append(error_class)

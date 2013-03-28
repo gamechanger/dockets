@@ -55,7 +55,7 @@ class Queue(PipelineObject):
             self.stat_gatherer = stat_gatherer_cls()
             self.add_event_handler(self.stat_gatherer)
 
-        self._retry_error_classes = _global_retry_error_classes + kwargs.get('retry_error_classes', [])
+        self._retry_error_classes = list(_global_retry_error_classes) + kwargs.get('retry_error_classes', [])
 
         self.error_queue = ErrorQueue(self) if use_error_queue else None
 
