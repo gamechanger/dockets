@@ -71,7 +71,7 @@ def single_queue_context(queue_class):
             self.ignore('use_queue')
 
         def use_redis(self, redis):
-            queue = queue_class(redis, 'test')
+            queue = queue_class(redis, 'test', use_error_queue=True)
             self.use_queue(queue)
             return queue
 
@@ -114,6 +114,13 @@ def queue_entry_checker(entry_value):
                     expect(topic).to_equal(entry_value)
     return TheEntry
 
+class ErrorQueueContext(Vows.Context):
+    def topic(self, queue):
+        return queue.error_queue
+
+class EmptyErrorQueueContext(ErrorQueueContext):
+    def should_be_empty(self, topic):
+        expect(topic.errors()).to_be_empty()
 
 def basic_queue_tests(context_class):
     class QueueTests(Vows.Context):
@@ -133,6 +140,9 @@ def basic_queue_tests(context_class):
                 def should_contain_the_worker_id(self, queue):
                     expect(queue.redis.sismember('queue.test.workers', 'test_worker'))
 
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
+
 
         class WhenPushedToOnce(context_class):
 
@@ -148,6 +158,9 @@ def basic_queue_tests(context_class):
             class ThePushedEntry(queue_entry_checker({'a': 1})):
                 def topic(self, queue):
                     return queue.queued_items()[0]
+
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
 
         class WhenPushedToTwice(context_class):
 
@@ -168,6 +181,9 @@ def basic_queue_tests(context_class):
             class TheSecondPushedEntry(queue_entry_checker({'b': 2})):
                 def topic(self, queue):
                     return queue.queued_items()[0]
+
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
 
         class WhenPushedToOnceAndPoppedFromOnce(context_class):
 
@@ -200,6 +216,9 @@ def basic_queue_tests(context_class):
                 def should_contain_the_worker_id(self, queue):
                     expect(queue.redis.sismember('queue.test.workers', 'test_worker'))
 
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
+
         class WhenPushedToOnceAndPoppedFromOnceAndCompleteCalledOnce(context_class):
 
             def use_queue(self, queue):
@@ -214,6 +233,9 @@ def basic_queue_tests(context_class):
 
                 def should_be_empty(self, queue):
                     expect(queue.redis.llen('queue.test.test_worker.working')).to_equal(0)
+
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
 
         class WhenWorkerRegistered(context_class):
 
@@ -269,6 +291,9 @@ def basic_queue_tests(context_class):
                 def success_should_be_one(self, topic):
                     expect(topic['success']).to_equal(1)
 
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
+
         class WhenPushedToTwiceAndRunOnce(WhenPushedToOnceAndRunOnce):
             def use_queue(self, queue):
                 queue.push({'a': 1})
@@ -280,6 +305,9 @@ def basic_queue_tests(context_class):
 
             def should_have_one_entry(self, queue):
                 expect(queue.queued()).to_equal(1)
+
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
 
         class WhenPushedToTwiceAndRunTwice(context_class):
             def use_queue(self, queue):
@@ -337,6 +365,9 @@ def basic_queue_tests(context_class):
                 def should_not_contain_expire_ts(self, topic):
                     expect(topic).Not.to_include('last_expire_ts')
 
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
+
         class WhenRetryItemIsRunOnce(context_class):
             def use_queue(self, queue):
                 queue.push({'action': 'retry'})
@@ -386,6 +417,9 @@ def basic_queue_tests(context_class):
                 def should_not_contain_last_success_ts(self, topic):
                     expect(topic).Not.to_include('last_success_ts')
 
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
+
         class WhenExpireItemIsRunOnce(context_class):
             def use_queue(self, queue):
                 queue.push({'action': 'expire'})
@@ -431,6 +465,8 @@ def basic_queue_tests(context_class):
                 def should_not_contain_last_success_ts(self, topic):
                     expect(topic).Not.to_include('last_success_ts')
 
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
 
         class WhenErrorItemIsRunOnce(context_class):
             def use_queue(self, queue):
@@ -477,6 +513,43 @@ def basic_queue_tests(context_class):
                 def should_not_contain_last_success_ts(self, topic):
                     expect(topic).Not.to_include('last_retry_ts')
 
+            class TheErrorQueue(ErrorQueueContext):
+
+                def should_have_length_one(self, topic):
+                    expect(topic.length()).to_equal(1)
+
+                def should_have_one_error(self, topic):
+                    expect(topic.errors()).to_length(1)
+
+                class TheRedisHash(Vows.Context):
+                    def topic(self, error_queue):
+                        return error_queue.redis.hgetall('queue.test.errors')
+
+                    def should_have_length_one(self, topic):
+                        expect(topic).to_length(1)
+
+                    def should_have_good_id(self, topic):
+                        expect(topic.keys()[0]).to_equal(simplejson.loads(topic.values()[0])['id'])
+
+                class TheError(Vows.Context):
+                    def topic(self, error_queue):
+                        return error_queue.errors()[0]
+
+                    def should_exist(self, topic):
+                        expect(topic).Not.to_be_null()
+
+                    def should_contain_traceback(self, topic):
+                        expect(topic).to_include('traceback')
+
+                    def should_have_correct_error_type(self, topic):
+                        expect(topic['error_type']).to_equal('Exception')
+
+                    def should_have_correct_error_text(self, topic):
+                        expect(topic['error_text']).to_equal('Error!')
+
+                    def should_have_correct_envelope(self, topic):
+                        expect(topic['envelope']['item']).to_equal({'action': 'error', 'message': 'Error!'})
+
         class WhenPushedToOnceAndPoppedFromOnceAndReclaimed(context_class):
             def use_queue(self, queue):
                 queue.push({'a': 1})
@@ -520,6 +593,9 @@ def basic_queue_tests(context_class):
             class TheWorkerQueue(Vows.Context):
                 def should_be_empty(self, queue):
                     expect(queue.redis.llen('queue.test.test_worker.working')).to_equal(0)
+
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
 
     return QueueTests
 

@@ -9,6 +9,7 @@ from dockets.metadata import WorkerMetadataRecorder
 from dockets.json_serializer import JsonSerializer
 from dockets.queue_event_registrar import QueueEventRegistrar
 from dockets.stat_gatherer import StatGatherer
+from dockets.error_queue import ErrorQueue
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class Queue(PipelineObject):
     def add_retry_error_class(cls, error_cls):
         cls.retry_error_classes.append(error_cls)
 
-    def __init__(self, redis, name, stat_gatherer_cls=StatGatherer, **kwargs):
+    def __init__(self, redis, name, stat_gatherer_cls=StatGatherer, use_error_queue=False, **kwargs):
         super(Queue, self).__init__(redis)
 
         self.name = name
@@ -59,6 +60,8 @@ class Queue(PipelineObject):
         if stat_gatherer_cls is not None:
             self.stat_gatherer = stat_gatherer_cls()
             self.add_event_handler(self.stat_gatherer)
+
+        self.error_queue = ErrorQueue(self) if use_error_queue else None
 
     @property
     def stats(self):
@@ -187,6 +190,8 @@ class Queue(PipelineObject):
             self._event_registrar.on_error(item=item, item_key=self.item_key(item),
                                            pipeline=pipeline, exc_info=sys.exc_info())
             worker_recorder.record_error(pipeline=pipeline)
+            if self.error_queue:
+                self.error_queue.queue_error(envelope, pipeline=pipeline)
         else:
             self._event_registrar.on_success(item=item, item_key=self.item_key(item),
                                              pipeline=pipeline)

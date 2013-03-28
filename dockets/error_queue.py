@@ -1,28 +1,54 @@
-from dockets.queue import Queue
+import sys
+import time
+from uuid import uuid1
+from traceback import format_exc
 
-class ErrorQueue(Queue):
+from dockets.pipeline import PipelineObject
+
+class ErrorQueue(PipelineObject):
     """
     This is a queue that can act as a queue error handler. Items which
     error out in the main queue will end up in this queue, with error
     information.
     """
-    @classmethod
-    def make_error_queue(cls, queue):
-        error_queue = cls(queue)
-        queue.add_event_handler(error_queue)
-        return error_queue
 
     def __init__(self, main_queue):
-        redis = main_queue.redis
-        name = '{0}_error'.format(main_queue.name)
-        serializer = main_queue._serializer
-        super(ErrorQueue, self).__init__(redis, name, serializer=serializer)
+        self.name = main_queue.name
+        self._serializer = main_queue._serializer
+        self.queue = main_queue
+        super(ErrorQueue, self).__init__(main_queue.redis)
 
-    def on_register(self, *args, **kwargs):
-        pass
-
-    def on_error(self, item, pipeline, exc_info, *args, **kwargs):
-        error_item = {'item': item,
+    @PipelineObject.with_pipeline
+    def queue_error(self, envelope, pipeline):
+        """
+        Record an error in processing the current item. This accesses
+        sys.exc_info, so it should only be called from an exception
+        handler.
+        """
+        error_id = str(uuid1())
+        exc_info = sys.exc_info()
+        error_item = {'envelope': envelope,
                       'error_type': str(exc_info[0].__name__),
-                      'error_text': str(exc_info[1])}
-        self.push(error_item)
+                      'error_text': str(exc_info[1]),
+                      'traceback': format_exc(),
+                      'ts': time.time(),
+                      'id': error_id}
+
+        pipeline.hset(self._hash_key(),
+                      error_id,
+                      self._serializer.serialize(error_item))
+
+    def requeue_error(self, error_id):
+        error = self._serializer.deserialize(self.redis.hget(self._hash_key(), error_id))
+        with self.redis.pipeline() as pipe:
+            pipe.hdel(self._hash_key(), error_id)
+            self.queue.push(error['envelope']['item'], pipeline=pipe, envelope=envelope)
+
+    def errors(self):
+        return map(self._serializer.deserialize, self.redis.hvals(self._hash_key()))
+
+    def length(self):
+        return self.redis.hlen(self._hash_key())
+
+    def _hash_key(self):
+        return 'queue.{}.errors'.format(self.name)

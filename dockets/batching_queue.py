@@ -75,6 +75,8 @@ def create_batching_queue(superclass):
                                                    item_key=self.item_key(envelope['item']),
                                                    pipeline=pipeline)
                     worker_recorder.record_error(pipeline=pipeline)
+                    if self.error_queue:
+                        self.error_queue.queue_error(envelope)
             else:
                 for envelope in envelopes_to_process:
                     self._event_registrar.on_success(item=envelope['item'],
