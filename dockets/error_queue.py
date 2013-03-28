@@ -27,6 +27,7 @@ class ErrorQueue(PipelineObject):
         """
         error_id = str(uuid1())
         exc_info = sys.exc_info()
+        assert exc_info[0], "queue_error must be called from inside an exception handler"
         error_item = {'envelope': envelope,
                       'error_type': str(exc_info[0].__name__),
                       'error_text': str(exc_info[1]),
