@@ -3,7 +3,7 @@ import logging
 import uuid
 import time
 
-from dockets import errors, _global_event_handler_classes
+from dockets import errors, _global_event_handler_classes, _global_retry_error_classes
 from dockets.pipeline import PipelineObject
 from dockets.metadata import WorkerMetadataRecorder
 from dockets.json_serializer import JsonSerializer
@@ -33,12 +33,6 @@ class Queue(PipelineObject):
     SERIALIZATION = 'serialization'
     DESERIALIZATION = 'deserialization'
 
-    retry_error_classes = [errors.RetryError]
-
-    @classmethod
-    def add_retry_error_class(cls, error_cls):
-        cls.retry_error_classes.append(error_cls)
-
     def __init__(self, redis, name, stat_gatherer_cls=StatGatherer, use_error_queue=False, **kwargs):
         super(Queue, self).__init__(redis)
 
@@ -60,6 +54,8 @@ class Queue(PipelineObject):
         if stat_gatherer_cls is not None:
             self.stat_gatherer = stat_gatherer_cls()
             self.add_event_handler(self.stat_gatherer)
+
+        self._retry_error_classes = _global_retry_error_classes + kwargs.get('retry_error_classes', [])
 
         self.error_queue = ErrorQueue(self) if use_error_queue else None
 
@@ -180,7 +176,7 @@ class Queue(PipelineObject):
             self._event_registrar.on_expire(item=item, item_key=self.item_key(item),
                                             pipeline=pipeline)
             worker_recorder.record_expire(pipeline=pipeline)
-        except tuple(self.retry_error_classes):
+        except tuple(self._retry_error_classes):
             self._event_registrar.on_retry(item=item, item_key=self.item_key(item),
                                            pipeline=pipeline)
             worker_recorder.record_retry(pipeline=pipeline)

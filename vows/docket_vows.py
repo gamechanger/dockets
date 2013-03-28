@@ -6,12 +6,13 @@ from util import FakeRedisContext
 
 
 from dockets.docket import Docket
-from dockets.errors import RetryError
+
+from basic_queue_vows import TestRetryError
 
 class TestDocketWithKey(Docket):
     def __init__(self, *args, **kwargs):
         kwargs['key'] = ['a']
-        super(TestDocketWithKey, self).__init__(*args, **kwargs)
+        super(TestDocketWithKey, self).__init__(*args, retry_error_classes=[TestRetryError], **kwargs)
         self.items_processed = []
 
     def process_item(self, item):
@@ -20,7 +21,7 @@ class TestDocketWithKey(Docket):
             self.items_processed.append(item)
             return
         if item['action'] == 'retry':
-            raise RetryError
+            raise TestRetryError
         if item['action'] == 'error':
             raise Exception(item['message'])
 

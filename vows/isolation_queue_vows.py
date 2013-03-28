@@ -6,7 +6,8 @@ from util import FakeRedisContext
 
 
 from dockets.isolation_queue import IsolationQueue
-from dockets.errors import RetryError
+
+from basic_queue_vows import TestRetryError
 
 @Vows.create_assertions
 def to_match_as_set(topic, expected):
@@ -16,7 +17,7 @@ def to_match_as_set(topic, expected):
 class TestIsolationQueueWithKey(IsolationQueue):
     def __init__(self, *args, **kwargs):
         kwargs['key'] = ['a']
-        super(TestIsolationQueueWithKey, self).__init__(*args, **kwargs)
+        super(TestIsolationQueueWithKey, self).__init__(*args, retry_error_classes=[TestRetryError], **kwargs)
         self.items_processed = []
 
     def process_item(self, item):

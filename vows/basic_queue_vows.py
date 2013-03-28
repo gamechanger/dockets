@@ -7,7 +7,11 @@ from dockets.queue import Queue
 from dockets.isolation_queue import IsolationQueue
 from dockets.batching_queue import BatchingQueue, BatchingIsolationQueue
 from dockets.docket import Docket
-from dockets.errors import RetryError, ExpiredError
+from dockets.errors import ExpiredError
+
+
+class TestRetryError(Exception):
+    pass
 
 def default_process_item(obj, item):
     if (not isinstance(item, dict) or 'action' not in item
@@ -15,12 +19,11 @@ def default_process_item(obj, item):
         obj.items_processed.append(item)
         return
     if item['action'] == 'retry':
-        raise RetryError
+        raise TestRetryError
     if item['action'] == 'expire':
         raise ExpiredError
     if item['action'] == 'error':
         raise Exception(item['message'])
-
 
 class TestQueue(Queue):
     def __init__(self, *args, **kwargs):
@@ -71,7 +74,7 @@ def single_queue_context(queue_class):
             self.ignore('use_queue')
 
         def use_redis(self, redis):
-            queue = queue_class(redis, 'test', use_error_queue=True)
+            queue = queue_class(redis, 'test', use_error_queue=True, retry_error_classes=[TestRetryError])
             self.use_queue(queue)
             return queue
 
