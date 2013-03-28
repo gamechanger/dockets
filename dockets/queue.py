@@ -32,6 +32,12 @@ class Queue(PipelineObject):
     SERIALIZATION = 'serialization'
     DESERIALIZATION = 'deserialization'
 
+    retry_error_classes = [errors.RetryError]
+
+    @classmethod
+    def add_retry_error_class(cls, error_cls):
+        cls.retry_error_classes.append(error_cls)
+
     def __init__(self, redis, name, stat_gatherer_cls=StatGatherer, **kwargs):
         super(Queue, self).__init__(redis)
 
@@ -171,7 +177,7 @@ class Queue(PipelineObject):
             self._event_registrar.on_expire(item=item, item_key=self.item_key(item),
                                             pipeline=pipeline)
             worker_recorder.record_expire(pipeline=pipeline)
-        except errors.RetryError:
+        except tuple(self.retry_error_classes):
             self._event_registrar.on_retry(item=item, item_key=self.item_key(item),
                                            pipeline=pipeline)
             worker_recorder.record_retry(pipeline=pipeline)
