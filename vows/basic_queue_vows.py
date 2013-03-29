@@ -553,6 +553,40 @@ def basic_queue_tests(context_class):
                     def should_have_correct_envelope(self, topic):
                         expect(topic['envelope']['item']).to_equal({'action': 'error', 'message': 'Error!'})
 
+        class WhenErrorItemIsRunOnceAndRequeued(context_class):
+            def use_queue(self, queue):
+                queue.push({'action': 'error', 'message': 'Error!'})
+                queue.run_once(worker_id='test_worker')
+                queue.error_queue.requeue_error(queue.error_queue.errors()[0]['id'])
+
+            def items_processed_should_be_empty(self, queue):
+                expect(queue.items_processed).to_be_empty()
+
+            def should_have_length_one(self, queue):
+                expect(queue.queued()).to_equal(1)
+
+            class ThePushedEntry(queue_entry_checker({'action': 'error', 'message': 'Error!'})):
+                def topic(self, queue):
+                    return queue.queued_items()[0]
+
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
+
+        class WhenErrorItemIsRunOnceAndDeleted(context_class):
+            def use_queue(self, queue):
+                queue.push({'action': 'error', 'message': 'Error!'})
+                queue.run_once(worker_id='test_worker')
+                queue.error_queue.delete_error(queue.error_queue.errors()[0]['id'])
+
+            def items_processed_should_be_empty(self, queue):
+                expect(queue.items_processed).to_be_empty()
+
+            def should_be_empty(self, queue):
+                expect(queue.queued()).to_equal(0)
+
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
+
         class WhenPushedToOnceAndPoppedFromOnceAndReclaimed(context_class):
             def use_queue(self, queue):
                 queue.push({'a': 1})

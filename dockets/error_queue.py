@@ -43,10 +43,17 @@ class ErrorQueue(PipelineObject):
         error = self._serializer.deserialize(self.redis.hget(self._hash_key(), error_id))
         with self.redis.pipeline() as pipe:
             pipe.hdel(self._hash_key(), error_id)
-            self.queue.push(error['envelope']['item'], pipeline=pipe, envelope=envelope)
+            self.queue.push(error['envelope']['item'], pipeline=pipe, envelope=error['envelope'])
+            pipe.execute()
+
+    def delete_error(self, error_id):
+        return self.redis.hdel(self._hash_key(), error_id)
 
     def errors(self):
         return map(self._serializer.deserialize, self.redis.hvals(self._hash_key()))
+
+    def error(self, id):
+        return self._serializer.deserialize(self.redis.hget(self._hash_key(), id))
 
     def length(self):
         return self.redis.hlen(self._hash_key())
