@@ -74,6 +74,12 @@ class Queue(PipelineObject):
         """
         raise NotImplementedError
 
+    def pre_run(self):
+        """
+        Provides a hook that will be executed before the queue is run
+        """
+        pass
+
     def item_key(self, item):
         if self.key:
             return '_'.join(str(item.get(key_component, ''))
@@ -134,6 +140,7 @@ class Queue(PipelineObject):
 
     def run(self, worker_id=None, extra_metadata={}):
         worker_id = self.register_worker(worker_id, extra_metadata)
+        self.pre_run()
         while True:
             if not self.run_once(worker_id):
                 time.sleep(self._wait_time)
