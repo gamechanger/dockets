@@ -52,6 +52,9 @@ class ErrorQueue(PipelineObject):
     def errors(self):
         return map(self._serializer.deserialize, self.redis.hvals(self._hash_key()))
 
+    def error_ids(self):
+        return self.redis.hkeys(self._hash_key())
+
     def error(self, id):
         return self._serializer.deserialize(self.redis.hget(self._hash_key(), id))
 
