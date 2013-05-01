@@ -524,6 +524,9 @@ def basic_queue_tests(context_class):
                 def should_have_one_error(self, topic):
                     expect(topic.errors()).to_length(1)
 
+                def should_have_one_error_id(self, topic):
+                    expect(topic.error_ids()).to_length(1)                    
+
                 class TheRedisHash(Vows.Context):
                     def topic(self, error_queue):
                         return error_queue.redis.hgetall('queue.test.errors')
@@ -537,6 +540,25 @@ def basic_queue_tests(context_class):
                 class TheError(Vows.Context):
                     def topic(self, error_queue):
                         return error_queue.errors()[0]
+
+                    def should_exist(self, topic):
+                        expect(topic).Not.to_be_null()
+
+                    def should_contain_traceback(self, topic):
+                        expect(topic).to_include('traceback')
+
+                    def should_have_correct_error_type(self, topic):
+                        expect(topic['error_type']).to_equal('Exception')
+
+                    def should_have_correct_error_text(self, topic):
+                        expect(topic['error_text']).to_equal('Error!')
+
+                    def should_have_correct_envelope(self, topic):
+                        expect(topic['envelope']['item']).to_equal({'action': 'error', 'message': 'Error!'})
+
+                class TheErrorRetrievedById(Vows.Context):
+                    def topic(self, error_queue):
+                        return error_queue.error(error_queue.error_ids()[0])
 
                     def should_exist(self, topic):
                         expect(topic).Not.to_be_null()
