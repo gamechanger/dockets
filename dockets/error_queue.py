@@ -46,6 +46,12 @@ class ErrorQueue(PipelineObject):
             self.queue.push(error['envelope']['item'], pipeline=pipe, envelope=error['envelope'])
             pipe.execute()
 
+    def requeue_all_errors(self):
+        """Requeues all items in the error queue so that they will
+        get retried."""
+        for error_id in self.error_ids():
+            self.requeue_error(error_id)
+
     def delete_error(self, error_id):
         return self.redis.hdel(self._hash_key(), error_id)
 
@@ -78,7 +84,13 @@ class DummyErrorQueue(object):
     def requeue_error(self, *args, **kwargs):
         raise NotImplementedError
 
+    def requeue_all_errors(self):
+        raise NotImplementedError
+
     def errors(self):
+        return []
+
+    def error_ids(self):
         return []
 
     def length(self):
