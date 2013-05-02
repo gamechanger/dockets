@@ -594,6 +594,23 @@ def basic_queue_tests(context_class):
             class TheErrorQueue(EmptyErrorQueueContext):
                 pass
 
+        class WhenMultipleErrorItemsAreRunOnceAndRequeued(context_class):
+            def use_queue(self, queue):
+                for i in range(5):
+                    queue.push({'action': 'error', 'message': 'Error{}'.format(i)})
+                    queue.run_once(worker_id='test_worker')
+                queue.error_queue.requeue_all_errors()
+
+            def items_processed_should_be_empty(self, queue):
+                expect(queue.items_processed).to_be_empty()
+
+            def should_have_length_five(self, queue):
+                expect(queue.queued()).to_equal(5)
+
+            class TheErrorQueue(EmptyErrorQueueContext):
+                pass
+
+
         class WhenErrorItemIsRunOnceAndDeleted(context_class):
             def use_queue(self, queue):
                 queue.push({'action': 'error', 'message': 'Error!'})
