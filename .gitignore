@@ -1,1 +1,5 @@
 *.pyc
+env
+build
+dist
+Dockets.egg-info
