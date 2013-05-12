@@ -1,0 +1,12 @@
+language: python
+python:
+  - "2.7"
+
+before_install:
+ - sudo apt-get install -qq libevent-dev
+# command to install dependencies
+install: 
+ - "python setup.py install"
+ - "pip install pyvows"
+# command to run tests
+script: "pyvows"
