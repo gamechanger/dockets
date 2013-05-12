@@ -15,11 +15,11 @@ class TestRetryError(Exception):
 
 def default_process_item(obj, item):
     if (not isinstance(item, dict) or 'action' not in item
-        or item['action'] == 'success'):
+            or item['action'] == 'success'):
         obj.items_processed.append(item)
         return
     if item['action'] == 'retry':
-        raise TestRetryError
+        raise TestRetryError(item['message'])
     if item['action'] == 'expire':
         raise ExpiredError
     if item['action'] == 'error':
@@ -74,7 +74,9 @@ def single_queue_context(queue_class):
             self.ignore('use_queue')
 
         def use_redis(self, redis):
-            queue = queue_class(redis, 'test', use_error_queue=True, retry_error_classes=[TestRetryError])
+            queue = queue_class(redis, 'test', use_error_queue=True, 
+                                retry_error_classes=[TestRetryError],
+                                max_attempts=5)
             self.use_queue(queue)
             return queue
 
@@ -373,7 +375,7 @@ def basic_queue_tests(context_class):
 
         class WhenRetryItemIsRunOnce(context_class):
             def use_queue(self, queue):
-                queue.push({'action': 'retry'})
+                queue.push({'action': 'retry', 'message': 'Retry Error!'})
                 queue.run_once(worker_id='test_worker')
 
             def items_processed_should_be_empty(self, queue):
@@ -382,7 +384,7 @@ def basic_queue_tests(context_class):
             def should_have_one_entry(self, queue):
                 expect(queue.queued()).to_equal(1)
 
-            class ThePushedEntry(queue_entry_checker({'action': 'retry'})):
+            class ThePushedEntry(queue_entry_checker({'action': 'retry', 'message': 'Retry Error!'})):
                 def topic(self, queue):
                     return queue.queued_items()[0]
 
@@ -422,6 +424,98 @@ def basic_queue_tests(context_class):
 
             class TheErrorQueue(EmptyErrorQueueContext):
                 pass
+
+        class WhenRetryItemIsRunFourTimes(context_class):
+            def use_queue(self, queue):
+                queue.push({'action': 'retry', 'message': 'Retry Error!'})
+                for i in range(4):
+                    queue.run_once(worker_id='test_worker')
+            
+            def items_processed_should_be_empty(self, queue):
+                expect(queue.items_processed).to_be_empty()
+
+            def should_have_one_entry(self, queue):
+                expect(queue.queued()).to_equal(1)
+
+            class WhenRetryItemIsRunAgain(context_class):
+                def topic(self, queue):
+                    queue.run_once(worker_id='test_worker')
+                    return queue
+
+                def should_be_empty(self, queue):
+                    expect(queue.queued()).to_equal(0)
+
+                class TheWorkerMetadata(Vows.Context):
+                    def topic(self, queue):
+                        return queue.active_worker_metadata()['test_worker']
+
+                    def should_exist(self, topic):
+                        expect(topic).Not.to_be_null()
+
+                    def should_contain_last_error_ts(self, topic):
+                        expect(topic).to_include('last_error_ts')
+
+                    def should_contain_error(self, topic):
+                        expect(topic).to_include('error')
+
+                    def error_should_be_one(self, topic):
+                        expect(topic['error']).to_equal(1)
+
+                    def should_contain_retry(self, topic):
+                        expect(topic).to_include('retry')
+
+                    def should_contain_last_retry_ts(self, topic):
+                        expect(topic).to_include('last_retry_ts')
+
+                    def should_not_contain_expire(self, topic):
+                        expect(topic).Not.to_include('expire')
+
+                    def should_not_contain_expire_ts(self, topic):
+                        expect(topic).Not.to_include('last_expire_ts')
+
+                    def should_not_contain_success(self, topic):
+                        expect(topic).Not.to_include('success')
+
+                    def should_not_contain_last_success_ts(self, topic):
+                        expect(topic).Not.to_include('last_success_ts')
+
+                class TheErrorQueue(ErrorQueueContext):
+
+                    def should_have_length_one(self, topic):
+                        expect(topic.length()).to_equal(1)
+
+                    def should_have_one_error(self, topic):
+                        expect(topic.errors()).to_length(1)
+
+                    class TheRedisHash(Vows.Context):
+                        def topic(self, error_queue):
+                            return error_queue.redis.hgetall('queue.test.errors')
+
+                        def should_have_length_one(self, topic):
+                            expect(topic).to_length(1)
+
+                        def should_have_good_id(self, topic):
+                            expect(topic.keys()[0]).to_equal(simplejson.loads(topic.values()[0])['id'])
+
+                    class TheError(Vows.Context):
+                        def topic(self, error_queue):
+                            return error_queue.errors()[0]
+
+                        def should_exist(self, topic):
+                            expect(topic).Not.to_be_null()
+
+                        def should_contain_traceback(self, topic):
+                            expect(topic).to_include('traceback')
+
+                        def should_have_correct_error_type(self, topic):
+                            expect(topic['error_type']).to_equal('TestRetryError')
+
+                        def should_have_correct_error_text(self, topic):
+                            expect(topic['error_text']).to_equal('Retry Error!')
+
+                        def should_have_correct_envelope(self, topic):
+                            expect(topic['envelope']['item']).to_equal({'action': 'retry', 'message': 'Retry Error!'})
+
 
         class WhenExpireItemIsRunOnce(context_class):
             def use_queue(self, queue):

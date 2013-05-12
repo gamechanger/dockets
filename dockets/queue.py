@@ -45,6 +45,7 @@ class Queue(PipelineObject):
         self._wait_time = kwargs.get('wait_time') or 60
         self._activity_timeout = kwargs.get('timeout', 60)
         self._serializer = kwargs.get('serializer', JsonSerializer())
+        self._max_attempts = kwargs.get('max_attempts', 3)
 
         # register event handlers
         self._event_registrar = QueueEventRegistrar(self)
@@ -107,13 +108,14 @@ class Queue(PipelineObject):
 
 
     @PipelineObject.with_pipeline
-    def push(self, item, pipeline, first_ts=None, ttl=None, envelope=None):
+    def push(self, item, pipeline, first_ts=None, ttl=None, envelope=None, attempts=0):
         envelope = {'first_ts': first_ts or (envelope and envelope['first_ts'])
                     or time.time(),
                     'ts': time.time(),
                     'item': item,
                     'v': self.version,
-                    'ttl': ttl}
+                    'ttl': ttl,
+                    'attempts': attempts}
         serialized_envelope = self._serializer.serialize(envelope)
         if self.mode == self.FIFO:
             pipeline.lpush(self._queue_key(), serialized_envelope)
@@ -155,10 +157,13 @@ class Queue(PipelineObject):
         worker_recorder.record_initial_metadata(extra_metadata)
         return worker_id
 
+
     def run_once(self, worker_id):
         """
         Run the queue for one step.
         """
+
+
         worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
                                                  worker_id)
         # The Big Pipeline
@@ -177,25 +182,34 @@ class Queue(PipelineObject):
                                      response_time=response_time,
                                      pipeline=pipeline)
 
+        def handle_error():
+            self._event_registrar.on_error(item=item, item_key=self.item_key(item),
+                                           pipeline=pipeline, exc_info=sys.exc_info())
+            worker_recorder.record_error(pipeline=pipeline)
+            self.error_queue.queue_error(envelope, pipeline=pipeline)
+
         try:
             if envelope['ttl'] and (envelope['first_ts'] + envelope['ttl'] < time.time()):
                 raise errors.ExpiredError
-            return_value = self.process_item(envelope['item'])
+            self.process_item(envelope['item'])
         except errors.ExpiredError:
             self._event_registrar.on_expire(item=item, item_key=self.item_key(item),
                                             pipeline=pipeline)
             worker_recorder.record_expire(pipeline=pipeline)
         except tuple(self._retry_error_classes):
-            self._event_registrar.on_retry(item=item, item_key=self.item_key(item),
-                                           pipeline=pipeline)
-            worker_recorder.record_retry(pipeline=pipeline)
-            # When we retry, first_ts stsys the same
-            self.push(envelope['item'], pipeline=pipeline, envelope=envelope)
-        except Exception as e:
-            self._event_registrar.on_error(item=item, item_key=self.item_key(item),
-                                           pipeline=pipeline, exc_info=sys.exc_info())
-            worker_recorder.record_error(pipeline=pipeline)
-            self.error_queue.queue_error(envelope, pipeline=pipeline)
+            # If we've tried this item three times already, cut our losses and
+            # treat it like other errors.
+            if envelope['attempts'] >= self._max_attempts - 1:
+                handle_error()
+            else:
+                self._event_registrar.on_retry(item=item, item_key=self.item_key(item),
+                                               pipeline=pipeline)
+                worker_recorder.record_retry(pipeline=pipeline)
+                # When we retry, first_ts stsys the same
+                self.push(envelope['item'], pipeline=pipeline, envelope=envelope,
+                          attempts=envelope['attempts'] + 1)
+        except Exception:
+            handle_error()
         else:
             self._event_registrar.on_success(item=item, item_key=self.item_key(item),
                                              pipeline=pipeline)
