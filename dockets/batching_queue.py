@@ -53,8 +53,16 @@ def create_batching_queue(superclass):
                                                     item_key=self.item_key(envelope['item']),
                                                     pipeline=pipeline)
                     worker_recorder.record_expire(pipeline=pipeline)
+
+            def handle_error(envelope):
+                self._event_registrar.on_error(item=envelope['item'],
+                                               item_key=self.item_key(envelope['item']),
+                                               pipeline=pipeline)
+                worker_recorder.record_error(pipeline=pipeline)
+                self.error_queue.queue_error(envelope)                
+
             try:
-                return_value = self.process_items([envelope['item'] for envelope in envelopes_to_process])
+                self.process_items([envelope['item'] for envelope in envelopes_to_process])
             except errors.ExpiredError:
                 for envelope in envelopes:
                     self._event_registrar.on_expire(item=envelope['item'],
@@ -63,19 +71,19 @@ def create_batching_queue(superclass):
                     worker_recorder.record_expire(pipeline=pipeline)
             except tuple(self._retry_error_classes):
                 for envelope in envelopes_to_process:
-                    self._event_registrar.on_retry(item=envelope['item'],
-                                                   item_key=self.item_key(envelope['item']),
-                                                   pipeline=pipeline)
-                    worker_recorder.record_retry(pipeline=pipeline)
-                    # When we retry, first_ts stsys the same
-                    self.push(envelope['item'], pipeline=pipeline, envelope=envelope)
-            except Exception as e:
+                    if envelope['attempts'] >= self._max_attempts - 1:
+                        handle_error(envelope)
+                    else:
+                        self._event_registrar.on_retry(item=envelope['item'],
+                                                       item_key=self.item_key(envelope['item']),
+                                                       pipeline=pipeline)
+                        worker_recorder.record_retry(pipeline=pipeline)
+                        # When we retry, first_ts stsys the same
+                        self.push(envelope['item'], pipeline=pipeline, envelope=envelope,
+                                  attempts=envelope['attempts'] + 1)
+            except Exception:
                 for envelope in envelopes_to_process:
-                    self._event_registrar.on_error(item=envelope['item'],
-                                                   item_key=self.item_key(envelope['item']),
-                                                   pipeline=pipeline)
-                    worker_recorder.record_error(pipeline=pipeline)
-                    self.error_queue.queue_error(envelope)
+                    handle_error(envelope)
             else:
                 for envelope in envelopes_to_process:
                     self._event_registrar.on_success(item=envelope['item'],

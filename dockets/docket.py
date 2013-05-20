@@ -18,7 +18,7 @@ class Docket(Queue):
     def _payload_key(self):
         return '{0}.payload'.format(self._queue_key())
 
-    def push(self, item, pipeline=None, when=None, envelope=None):
+    def push(self, item, pipeline=None, when=None, envelope=None, attempts=0):
         passed_pipeline = True
         if not pipeline:
             passed_pipeline = False
@@ -30,7 +30,8 @@ class Docket(Queue):
                     'first_ts': time.time(),
                     'item': item,
                     'ttl': None,
-                    'v': 1}
+                    'v': 1,
+                    'attempts': attempts}
         key = self.item_key(item)
         pipeline.hset(self._payload_key(), key,
                       self._serializer.serialize(envelope))
