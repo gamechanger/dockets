@@ -67,7 +67,7 @@ class IsolationQueue(Queue):
                         super(IsolationQueue, self).push(latest_version, pipeline=pipeline)
                         pipeline.hdel(self._latest_add_key(), key)
                     else:
-                        pipeline.delete(self._entry_key(key), key)
+                        pipeline.delete(self._entry_key(key))
                     pipeline.execute()
                     break
                 except WatchError:
