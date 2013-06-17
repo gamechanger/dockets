@@ -1,7 +1,7 @@
 BENCH_FILE=benchmark/results.txt
 
 test:
-	PYTHONPATH=$(CURDIR) pyvows vows
+	PYTHONPATH=$(CURDIR) nosetests test
 
 bench:
 	echo "" > $(BENCH_FILE)
