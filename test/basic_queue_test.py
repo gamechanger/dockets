@@ -1,3 +1,6 @@
+import os
+from multiprocessing import Process
+
 import simplejson
 from nose import with_setup
 
@@ -311,6 +314,26 @@ def push_once_reclaim_once_unset_worker_key_reclaim(queue):
     queue._reclaim()
     assert queue.queued() == 1
     assert_queue_entry(queue.queued_items()[0], {'a': 1})
+
+def run_bad_worker(queue):
+    redis.get('HELLOREDIS')
+    queue.push({'a': 1})
+    def bad_process_item(item):
+        os._exit(0)
+    queue.process_item = bad_process_item
+    queue.run_once('test_worker')
+
+@register
+def push_once_run_bad_worker_unset_worker_key_reclaim(queue):
+    p = Process(target=run_bad_worker, args=(queue,))
+    p.start()
+    p.join()
+    assert queue.queued() == 0
+    redis.delete(queue._worker_activity_key('test_worker'))
+    queue._reclaim()
+    redis.get('GONNACHECK')
+    print queue.queued()
+    assert queue.queued() == 1
 
 @register
 def deserialization_error(queue):
