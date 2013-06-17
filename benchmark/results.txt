@@ -1,9 +1,0 @@
-
-queue_push_1_run_1
-1000 loops, best of 3: 796 usec per loop
-docket_push_1_run_1
-1000 loops, best of 3: 1.18 msec per loop
-queue_push_10_run_10
-1000 loops, best of 3: 7.99 msec per loop
-docket_push_10_run_10
-1000 loops, best of 3: 12.1 msec per loop

@@ -1,4 +1,4 @@
-BENCH_FILE=benchmark/results.txt
+BENCH_FILE=benchmark/results-`git rev-parse HEAD`.txt
 
 test:
 	PYTHONPATH=$(CURDIR) nosetests test
