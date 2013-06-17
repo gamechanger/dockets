@@ -17,5 +17,5 @@ setuptools.setup(
     packages=["dockets"],
     long_description="LONG",
     install_requires=['simplejson','redis','python-dateutil'],
-    tests_require=['pyvows']
+    tests_require=['nose']
 )
