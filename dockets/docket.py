@@ -38,7 +38,11 @@ class Docket(Queue):
         n_added = pipeline.zadd(self._queue_key(),
                                 key,
                                 timestamp)
-        self._event_registrar.on_push(item=item, item_key=key, pipeline=pipeline)
+        self._event_registrar.on_push(
+            item=item,
+            item_key=key,
+            pipeline=pipeline,
+            pretty_printed_item=self.pretty_printer(item))
         if passed_pipeline:
             return None
         return_values = pipeline.execute()
