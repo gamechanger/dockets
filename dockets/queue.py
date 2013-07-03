@@ -81,6 +81,9 @@ class Queue(PipelineObject):
         """
         pass
 
+    def pretty_printer(self, item):
+        return self.item_key(item)
+
     def item_key(self, item):
         if self.key:
             return '_'.join(str(item.get(key_component, ''))
@@ -124,8 +127,11 @@ class Queue(PipelineObject):
             pipeline.lpush(self._queue_key(), serialized_envelope)
         else:
             pipeline.rpush(self._queue_key(), serialized_envelope)
-        self._event_registrar.on_push(item=item, item_key=self.item_key(item),
-                                      pipeline=pipeline)
+        self._event_registrar.on_push(
+            item=item,
+            item_key=self.item_key(item),
+            pipeline=pipeline,
+            pretty_printed_item=self.pretty_printer(item))
 
 
     @PipelineObject.with_pipeline
@@ -186,8 +192,11 @@ class Queue(PipelineObject):
                                      pipeline=pipeline)
 
         def handle_error():
-            self._event_registrar.on_error(item=item, item_key=self.item_key(item),
-                                           pipeline=pipeline, exc_info=sys.exc_info())
+            self._event_registrar.on_error(
+                item=item,
+                item_key=self.item_key(item),
+                pipeline=pipeline, exc_info=sys.exc_info(),
+                pretty_printed_item=self.pretty_printer(item))
             worker_recorder.record_error(pipeline=pipeline)
             self.error_queue.queue_error(envelope, pipeline=pipeline)
 
@@ -196,8 +205,11 @@ class Queue(PipelineObject):
                 raise errors.ExpiredError
             self.process_item(envelope['item'])
         except errors.ExpiredError:
-            self._event_registrar.on_expire(item=item, item_key=self.item_key(item),
-                                            pipeline=pipeline)
+            self._event_registrar.on_expire(
+                item=item,
+                item_key=self.item_key(item),
+                pipeline=pipeline,
+                pretty_printed_item=self.pretty_printer(item))
             worker_recorder.record_expire(pipeline=pipeline)
         except tuple(self._retry_error_classes):
             # If we've tried this item three times already, cut our losses and
@@ -205,8 +217,11 @@ class Queue(PipelineObject):
             if envelope['attempts'] >= self._max_attempts - 1:
                 handle_error()
             else:
-                self._event_registrar.on_retry(item=item, item_key=self.item_key(item),
-                                               pipeline=pipeline)
+                self._event_registrar.on_retry(
+                    item=item,
+                    item_key=self.item_key(item),
+                    pipeline=pipeline,
+                    pretty_printed_item=self.pretty_printer(item))
                 worker_recorder.record_retry(pipeline=pipeline)
                 # When we retry, first_ts stsys the same
                 self.push(envelope['item'], pipeline=pipeline, envelope=envelope,
@@ -214,8 +229,11 @@ class Queue(PipelineObject):
         except Exception:
             handle_error()
         else:
-            self._event_registrar.on_success(item=item, item_key=self.item_key(item),
-                                             pipeline=pipeline)
+            self._event_registrar.on_success(
+                item=item,
+                item_key=self.item_key(item),
+                pipeline=pipeline,
+                pretty_printed_item=self.pretty_printer(item))
             worker_recorder.record_success(pipeline=pipeline)
         finally:
             self.complete(envelope, worker_id, pipeline=pipeline)

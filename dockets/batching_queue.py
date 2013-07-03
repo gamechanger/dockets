@@ -51,15 +51,17 @@ def create_batching_queue(superclass):
                     envelopes_to_process.remove(envelope)
                     self._event_registrar.on_expire(item=envelope['item'],
                                                     item_key=self.item_key(envelope['item']),
-                                                    pipeline=pipeline)
+                                                    pipeline=pipeline,
+                                                    pretty_printed_item=self.pretty_printer(envelope['item']))
                     worker_recorder.record_expire(pipeline=pipeline)
 
             def handle_error(envelope):
                 self._event_registrar.on_error(item=envelope['item'],
                                                item_key=self.item_key(envelope['item']),
-                                               pipeline=pipeline)
+                                               pipeline=pipeline,
+                                               pretty_printed_item=self.pretty_printer(envelope['item']))
                 worker_recorder.record_error(pipeline=pipeline)
-                self.error_queue.queue_error(envelope)                
+                self.error_queue.queue_error(envelope)
 
             try:
                 self.process_items([envelope['item'] for envelope in envelopes_to_process])
@@ -67,7 +69,8 @@ def create_batching_queue(superclass):
                 for envelope in envelopes:
                     self._event_registrar.on_expire(item=envelope['item'],
                                                     item_key=self.item_key(envelope['item']),
-                                                    pipeline=pipeline)
+                                                    pipeline=pipeline,
+                                                    pretty_printed_item=self.pretty_printer(envelope['item']))
                     worker_recorder.record_expire(pipeline=pipeline)
             except tuple(self._retry_error_classes):
                 for envelope in envelopes_to_process:
@@ -76,7 +79,8 @@ def create_batching_queue(superclass):
                     else:
                         self._event_registrar.on_retry(item=envelope['item'],
                                                        item_key=self.item_key(envelope['item']),
-                                                       pipeline=pipeline)
+                                                       pipeline=pipeline,
+                                                       pretty_printed_item=self.pretty_printer(envelope['item']))
                         worker_recorder.record_retry(pipeline=pipeline)
                         # When we retry, first_ts stsys the same
                         self.push(envelope['item'], pipeline=pipeline, envelope=envelope,
@@ -88,7 +92,8 @@ def create_batching_queue(superclass):
                 for envelope in envelopes_to_process:
                     self._event_registrar.on_success(item=envelope['item'],
                                                      item_key=self.item_key(envelope['item']),
-                                                     pipeline=pipeline)
+                                                     pipeline=pipeline,
+                                                     pretty_printed_item=self.pretty_printer(envelope['item']))
                     worker_recorder.record_success(pipeline=pipeline)
             finally:
                 for envelope in envelopes:

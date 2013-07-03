@@ -13,10 +13,10 @@ class LoggingEventHandler(object):
         self.queue = queue
 
     def make_event_logger(self, name, level=logging.INFO):
-        def handler(item_key, exc_info=None, **kwargs):
+        def handler(pretty_printed_item, exc_info=None, **kwargs):
             event_description = '{0} {1} {2}'.format(self.queue.name,
                                                      name.capitalize(),
-                                                     item_key)
+                                                     pretty_printed_item)
             self.logger.log(level, event_description, exc_info=exc_info)
         setattr(self, 'on_{0}'.format(name), handler)
 
