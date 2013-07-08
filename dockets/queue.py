@@ -148,9 +148,9 @@ class Queue(PipelineObject):
         self.pre_run()
         should_continue = should_continue or (lambda: True)
         while True:
+            if not should_continue():
+                break
             if not self.run_once(worker_id):
-                if not should_continue():
-                    break
                 time.sleep(self._wait_time)
 
     def register_worker(self, worker_id=None, extra_metadata={}):
