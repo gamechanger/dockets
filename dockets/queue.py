@@ -143,11 +143,14 @@ class Queue(PipelineObject):
         """
         pipeline.lrem(self._working_queue_key(worker_id), serialized_envelope)
 
-    def run(self, worker_id=None, extra_metadata={}):
+    def run(self, worker_id=None, extra_metadata={}, should_continue=None):
         worker_id = self.register_worker(worker_id, extra_metadata)
         self.pre_run()
+        should_continue = should_continue or (lambda: True)
         while True:
             if not self.run_once(worker_id):
+                if not should_continue():
+                    break
                 time.sleep(self._wait_time)
 
     def register_worker(self, worker_id=None, extra_metadata={}):
