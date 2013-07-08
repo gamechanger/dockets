@@ -3,6 +3,7 @@ from multiprocessing import Process
 
 import simplejson
 from nose import with_setup
+from mock import Mock, ANY, patch
 
 from util import *
 from dockets.queue import Queue
@@ -331,6 +332,31 @@ def push_once_run_bad_worker_unset_worker_key_reclaim(queue):
     redis.delete(queue._worker_activity_key('test_worker'))
     queue._reclaim()
     assert queue.queued() == 1
+
+@register
+@patch('dockets.queue.time.sleep')
+def run_with_constant_false_should_continue(queue, sleep):
+    queue.run_once = Mock(return_value=True)
+    queue.run(should_continue=(lambda: False))
+    assert not queue.run_once.called
+    assert not sleep.called
+
+@register
+@patch('dockets.queue.time.sleep')
+def run_with_one_true_should_continue(queue, sleep):
+    queue.run_once = Mock(return_value=True)
+    queue.run(should_continue=Mock(side_effect=[True, False]))
+    queue.run_once.assert_called_once_with(ANY)
+    assert not sleep.called
+
+@register
+@patch('dockets.queue.time.sleep')
+def run_with_one_true_should_continue_and_no_items(queue, sleep):
+    queue.run_once = Mock(return_value=None)
+    queue.run(should_continue=Mock(side_effect=[True, False]))
+    queue.run_once.assert_called_once_with(ANY)
+    sleep.assert_called_once_with(queue._wait_time)
+
 
 @register
 def deserialization_error(queue):
