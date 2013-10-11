@@ -74,6 +74,24 @@ class IsolationQueue(Queue):
                     continue
         super(IsolationQueue, self).complete(envelope, *args, **kwargs)
 
+    def delete(self, envelope, *args, **kwargs):
+        """
+        A callback mechanism invoked when an item is deleted from the
+        queue's error queue. Ensures the item's entry and latest add
+        keys get cleared up.
+        """
+        key = self.item_key(envelope['item'])
+        with self.redis.pipeline() as pipeline:
+            while True:
+                try:
+                    pipeline.watch(self._entry_key(key))
+                    pipeline.hdel(self._latest_add_key(), key)
+                    pipeline.delete(self._entry_key(key))
+                    pipeline.execute()
+                    break
+                except WatchError:
+                    continue
+        super(IsolationQueue, self).delete(envelope, *args, **kwargs)
 
     # key names
 

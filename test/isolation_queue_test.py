@@ -6,7 +6,11 @@ from dockets.isolation_queue import IsolationQueue
 class TestIsolationQueueWithKey(IsolationQueue):
     def __init__(self, *args, **kwargs):
         kwargs['key'] = ['a']
-        super(TestIsolationQueueWithKey, self).__init__(*args, retry_error_classes=[TestRetryError], **kwargs)
+        super(TestIsolationQueueWithKey, self).__init__(
+            *args,
+            retry_error_classes=[TestRetryError],
+            use_error_queue=True,
+            **kwargs)
         self.items_processed = []
 
     def process_item(self, item):
@@ -69,3 +73,18 @@ def test_push_twice_same_key_run_twice():
     assert not redis.get('queue.test.entry.1')
     assert not redis.hgetall('queue.test.latest')
     assert queue.items_processed == [{'a': 1, 'b': 1}, {'a': 1, 'b': 2}]
+
+@clear
+def test_delete_from_error_queue():
+    queue = make_queue()
+    queue.push({'a': 1, 'b': 1, 'action': 'error'})
+    queue.run_once(worker_id='test_worker')
+    assert queue.queued() == 0
+    assert queue.error_queue.length() == 1
+    queue.error_queue.delete_error(queue.error_queue.error_ids()[0])
+    queue.push({'a': 1, 'b': 2})
+    queue.run_once(worker_id='test_worker')
+    assert queue.queued() == 0
+    assert not redis.get('queue.test.entry.1')
+    assert not redis.hgetall('queue.test.latest')
+    assert queue.items_processed == [{'a': 1, 'b': 2}]
