@@ -53,6 +53,7 @@ class ErrorQueue(PipelineObject):
             self.requeue_error(error_id)
 
     def delete_error(self, error_id):
+        self.queue.delete(self.error(error_id)['envelope'])
         return self.redis.hdel(self._hash_key(), error_id)
 
     def errors(self):

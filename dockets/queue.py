@@ -141,6 +141,15 @@ class Queue(PipelineObject):
         """
         pipeline.lpop(self._working_queue_key(worker_id))
 
+
+    def delete(self, envelope, *args, **kwargs):
+        """
+        Callback invoked when an item in the queue's associated error queue
+        is deleted. Allows subclasses to perform custom cleanup.
+        """
+        pass
+
+
     @PipelineObject.with_pipeline
     def raw_complete(self, serialized_envelope, worker_id, pipeline):
         """
