@@ -1,3 +1,4 @@
+import socket
 import sys
 import time
 from uuid import uuid1
@@ -32,6 +33,7 @@ class ErrorQueue(PipelineObject):
                       'error_type': str(exc_info[0].__name__),
                       'error_text': str(exc_info[1]),
                       'traceback': format_exc(),
+                      'hostname': socket.gethostname(),
                       'ts': time.time(),
                       'id': error_id}
 
