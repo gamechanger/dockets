@@ -2,6 +2,7 @@ import sys
 import logging
 import uuid
 import time
+import pickle
 
 from dockets import errors, _global_event_handler_classes, _global_retry_error_classes
 from dockets.pipeline import PipelineObject
@@ -114,14 +115,19 @@ class Queue(PipelineObject):
 
 
     @PipelineObject.with_pipeline
-    def push(self, item, pipeline, first_ts=None, ttl=None, envelope=None, attempts=0):
+    def push(self, item, pipeline, first_ts=None, ttl=None, envelope=None,
+             max_attempts=None, attempts=0, error_classes=None):
+        if not max_attempts:
+            max_attempts = self._max_attempts
         envelope = {'first_ts': first_ts or (envelope and envelope['first_ts'])
                     or time.time(),
                     'ts': time.time(),
                     'item': item,
                     'v': self.version,
                     'ttl': ttl,
-                    'attempts': attempts}
+                    'attempts': attempts,
+                    'max_attempts': max_attempts,
+                    'error_classes': error_classes}
         serialized_envelope = self._serializer.serialize(envelope)
         if self.mode == self.FIFO:
             pipeline.lpush(self._queue_key(), serialized_envelope)
@@ -183,8 +189,6 @@ class Queue(PipelineObject):
         """
         Run the queue for one step.
         """
-
-
         worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
                                                  worker_id)
         # The Big Pipeline
@@ -202,6 +206,11 @@ class Queue(PipelineObject):
         self._event_registrar.on_pop(item=item, item_key=self.item_key(item),
                                      response_time=response_time,
                                      pipeline=pipeline)
+
+        if envelope.get('error_classes'):
+            item_error_classes = pickle.loads(envelope['error_classes'])
+        else:
+            item_error_classes = self._retry_error_classes
 
         def handle_error():
             self._event_registrar.on_error(
@@ -223,10 +232,11 @@ class Queue(PipelineObject):
                 pipeline=pipeline,
                 pretty_printed_item=self.pretty_printer(item))
             worker_recorder.record_expire(pipeline=pipeline)
-        except tuple(self._retry_error_classes):
+        except tuple(item_error_classes):
             # If we've tried this item three times already, cut our losses and
             # treat it like other errors.
-            if envelope['attempts'] >= self._max_attempts - 1:
+            max_attempts = envelope.get('max_attempts', self._max_attempts)
+            if envelope['attempts'] >= max_attempts - 1:
                 handle_error()
             else:
                 self._event_registrar.on_retry(
@@ -237,7 +247,9 @@ class Queue(PipelineObject):
                 worker_recorder.record_retry(pipeline=pipeline)
                 # When we retry, first_ts stsys the same
                 self.push(envelope['item'], pipeline=pipeline, envelope=envelope,
-                          attempts=envelope['attempts'] + 1)
+                          max_attempts=max_attempts,
+                          attempts=envelope['attempts'] + 1,
+                          error_classes=item_error_classes)
         except Exception:
             handle_error()
         else:
