@@ -1,6 +1,7 @@
 import logging
 import time
 import pickle
+import collections
 
 from redis import WatchError
 
@@ -72,6 +73,8 @@ def create_batching_queue(superclass):
                         item_error_classes = self._retry_error_classes
                 else:
                     item_error_classes = self._retry_error_classes
+                if not isinstance(item_error_classes, collections.Iterable):
+                    item_error_classes = tuple([item_error_classes])
 
                 try:
                     self.process_item(envelope['item'])

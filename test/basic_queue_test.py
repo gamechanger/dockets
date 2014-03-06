@@ -219,6 +219,24 @@ def run_retry_item_3x_per_item_retry(queue):
     assert error_queue.length() == 1
 
 @register
+def run_error_item_queue_default_errors(queue):
+    queue.push({'action': 'error', 'message': 'Error!'})
+    queue.run_once(worker_id='test_worker')
+    assert not queue.items_processed
+    assert queue.queued() == 0
+    error_queue = queue.error_queue
+    assert error_queue.length() == 1
+
+@register
+def run_error_item_per_item_errors(queue):
+    queue.push({'action': 'error', 'message': 'Error!'}, error_classes=Exception)
+    queue.run_once(worker_id='test_worker')
+    assert not queue.items_processed
+    assert queue.queued() == 1
+    error_queue = queue.error_queue
+    assert error_queue.length() == 0
+
+@register
 def run_retry_item_5x(queue):
     queue.push({'action': 'retry', 'message': 'Retry Error!'})
     for _ in range(4):

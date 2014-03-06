@@ -3,6 +3,7 @@ import logging
 import uuid
 import time
 import pickle
+import collections
 
 from dockets import errors, _global_event_handler_classes, _global_retry_error_classes
 from dockets.pipeline import PipelineObject
@@ -214,6 +215,8 @@ class Queue(PipelineObject):
                 item_error_classes = self._retry_error_classes
         else:
             item_error_classes = self._retry_error_classes
+        if not isinstance(item_error_classes, collections.Iterable):
+            item_error_classes = tuple([item_error_classes])
 
         def handle_error():
             self._event_registrar.on_error(
