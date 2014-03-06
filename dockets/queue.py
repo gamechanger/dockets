@@ -127,7 +127,7 @@ class Queue(PipelineObject):
                     'ttl': ttl,
                     'attempts': attempts,
                     'max_attempts': max_attempts,
-                    'error_classes': error_classes}
+                    'error_classes': pickle.dumps(error_classes)}
         serialized_envelope = self._serializer.serialize(envelope)
         if self.mode == self.FIFO:
             pipeline.lpush(self._queue_key(), serialized_envelope)
@@ -207,8 +207,11 @@ class Queue(PipelineObject):
                                      response_time=response_time,
                                      pipeline=pipeline)
 
-        if envelope.get('error_classes'):
+        # this is convoluted because pickled None is truthy
+        if 'error_classes' in envelope:
             item_error_classes = pickle.loads(envelope['error_classes'])
+            if not item_error_classes:
+                item_error_classes = self._retry_error_classes
         else:
             item_error_classes = self._retry_error_classes
 
@@ -245,11 +248,15 @@ class Queue(PipelineObject):
                     pipeline=pipeline,
                     pretty_printed_item=self.pretty_printer(item))
                 worker_recorder.record_retry(pipeline=pipeline)
-                # When we retry, first_ts stsys the same
-                self.push(envelope['item'], pipeline=pipeline, envelope=envelope,
-                          max_attempts=max_attempts,
-                          attempts=envelope['attempts'] + 1,
-                          error_classes=item_error_classes)
+                # When we retry, first_ts stays the same
+                try:
+                    self.push(envelope['item'], pipeline=pipeline, envelope=envelope,
+                              first_ts=envelope['first_ts'],
+                              max_attempts=max_attempts,
+                              attempts=envelope['attempts'] + 1,
+                              error_classes=item_error_classes)
+                except Exception as e:
+                    print e
         except Exception:
             handle_error()
         else:
