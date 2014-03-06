@@ -194,8 +194,6 @@ def run_retry_item(queue):
 
 @register
 def run_retry_item_3x_queue_default_retry(queue):
-    if isinstance(queue, (TestIsolationQueue, TestBatchingIsolationQueue)):
-        return
     queue.push({'action': 'retry', 'message': 'Retry Error!'})
     for _ in range(2):
         queue.run_once(worker_id='test_worker')
@@ -209,8 +207,6 @@ def run_retry_item_3x_queue_default_retry(queue):
 
 @register
 def run_retry_item_3x_per_item_retry(queue):
-    if isinstance(queue, (TestIsolationQueue, TestBatchingIsolationQueue)):
-        return
     queue.push({'action': 'retry', 'message': 'Retry Error!'}, max_attempts=3)
     for _ in range(2):
         queue.run_once(worker_id='test_worker')

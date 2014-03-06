@@ -42,7 +42,7 @@ class IsolationQueue(Queue):
                         pipeline.hset(self._latest_add_key(),
                                       key, self._serializer.serialize(item))
                     else:
-                        super(IsolationQueue, self).push(item, pipeline=pipeline)
+                        super(IsolationQueue, self).push(item, pipeline=pipeline, **kwargs)
                         pipeline.set(self._entry_key(key), 1)
                     pipeline.execute()
                     break
