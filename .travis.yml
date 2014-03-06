@@ -4,9 +4,12 @@ python:
 
 before_install:
  - sudo apt-get install -qq libevent-dev
-# command to install dependencies
+
 install:
  - "python setup.py install"
  - "pip install nose"
-# command to run tests
+
+services:
+  - redis-server
+
 script: "make test"
