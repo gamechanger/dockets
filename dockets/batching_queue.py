@@ -1,5 +1,6 @@
 import logging
 import time
+import pickle
 
 from redis import WatchError
 
@@ -19,15 +20,8 @@ def create_batching_queue(superclass):
             self._batch_size = kwargs.get('batch_size') or 10
             super(BatchingQueue, self).__init__(*args, **kwargs)
 
-        def run_once(self, worker_id):
-            """
-            Run the queue for one step.
-            """
+        def gather_envelopes(self, pipeline, worker_id):
             envelopes = []
-            worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
-                                                     worker_id)
-            # The Big Pipeline
-            pipeline = self.redis.pipeline()
             while len(envelopes) < self._batch_size:
                 envelope = self.pop(worker_id, pipeline=pipeline)
                 if not envelope:
@@ -39,12 +33,9 @@ def create_batching_queue(superclass):
                                              response_time=response_time,
                                              pipeline=pipeline)
                 envelopes.append(envelope)
+            return envelopes
 
-            if not envelopes:
-                pipeline.execute()
-                return None
-
-            # clear expired envelopes
+        def clear_expired_envelopes(self, worker_recorder, pipeline, envelopes):
             envelopes_to_process = list(envelopes)
             for envelope in envelopes:
                 if envelope['ttl'] and (envelope['first_ts'] + envelope['ttl'] < time.time()):
@@ -54,6 +45,20 @@ def create_batching_queue(superclass):
                                                     pipeline=pipeline,
                                                     pretty_printed_item=self.pretty_printer(envelope['item']))
                     worker_recorder.record_expire(pipeline=pipeline)
+            return envelopes_to_process
+
+        def run_once(self, worker_id):
+            """
+            Run the queue for one step.
+            """
+            worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
+                                                     worker_id)
+            pipeline = self.redis.pipeline()
+            envelopes = self.gather_envelopes(pipeline, worker_id)
+            if not envelopes:
+                pipeline.execute()
+                return None
+            envelopes = self.clear_expired_envelopes(worker_recorder, pipeline, envelopes)
 
             def handle_error(envelope):
                 self._event_registrar.on_error(item=envelope['item'],
@@ -63,18 +68,19 @@ def create_batching_queue(superclass):
                 worker_recorder.record_error(pipeline=pipeline)
                 self.error_queue.queue_error(envelope)
 
-            try:
-                self.process_items([envelope['item'] for envelope in envelopes_to_process])
-            except errors.ExpiredError:
-                for envelope in envelopes:
+            for envelope in envelopes:
+                item_error_classes = self.error_classes_for_envelope(envelope)
+                try:
+                    self.process_item(envelope['item'])
+                except errors.ExpiredError:
                     self._event_registrar.on_expire(item=envelope['item'],
                                                     item_key=self.item_key(envelope['item']),
                                                     pipeline=pipeline,
                                                     pretty_printed_item=self.pretty_printer(envelope['item']))
                     worker_recorder.record_expire(pipeline=pipeline)
-            except tuple(self._retry_error_classes):
-                for envelope in envelopes_to_process:
-                    if envelope['attempts'] >= self._max_attempts - 1:
+                except tuple(item_error_classes):
+                    max_attempts = envelope.get('max_attempts', self._max_attempts)
+                    if envelope['attempts'] >= max_attempts - 1:
                         handle_error(envelope)
                     else:
                         self._event_registrar.on_retry(item=envelope['item'],
@@ -82,21 +88,20 @@ def create_batching_queue(superclass):
                                                        pipeline=pipeline,
                                                        pretty_printed_item=self.pretty_printer(envelope['item']))
                         worker_recorder.record_retry(pipeline=pipeline)
-                        # When we retry, first_ts stsys the same
+                        # When we retry, first_ts stays the same
                         self.push(envelope['item'], pipeline=pipeline, envelope=envelope,
-                                  attempts=envelope['attempts'] + 1)
-            except Exception:
-                for envelope in envelopes_to_process:
+                                  max_attempts=max_attempts,
+                                  attempts=envelope['attempts'] + 1,
+                                  error_classes=item_error_classes)
+                except Exception as e:
                     handle_error(envelope)
-            else:
-                for envelope in envelopes_to_process:
+                else:
                     self._event_registrar.on_success(item=envelope['item'],
                                                      item_key=self.item_key(envelope['item']),
                                                      pipeline=pipeline,
                                                      pretty_printed_item=self.pretty_printer(envelope['item']))
                     worker_recorder.record_success(pipeline=pipeline)
-            finally:
-                for envelope in envelopes:
+                finally:
                     self.complete(envelope, worker_id, pipeline=pipeline)
                     complete_time = time.time()
                     turnaround_time = complete_time - float(envelope['first_ts'])
@@ -106,7 +111,7 @@ def create_batching_queue(superclass):
                                                       turnaround_time=turnaround_time,
                                                       processing_time=processing_time,
                                                       pipeline=pipeline)
-                    pipeline.execute()
+            pipeline.execute()
             return envelopes
 
         def process_items(self, items):

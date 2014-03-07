@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 from numbers import Number
 import uuid
+import pickle
 
 import dateutil.parser
 from redis import WatchError
@@ -18,7 +19,8 @@ class Docket(Queue):
     def _payload_key(self):
         return '{0}.payload'.format(self._queue_key())
 
-    def push(self, item, pipeline=None, when=None, envelope=None, attempts=0):
+    def push(self, item, pipeline=None, when=None, envelope=None,
+             max_attempts=None, attempts=0, error_classes=None):
         passed_pipeline = True
         if not pipeline:
             passed_pipeline = False
@@ -31,7 +33,9 @@ class Docket(Queue):
                     'item': item,
                     'ttl': None,
                     'v': 1,
-                    'attempts': attempts}
+                    'attempts': attempts,
+                    'max_attempts': max_attempts or self._max_attempts,
+                    'error_classes': pickle.dumps(error_classes)}
         key = self.item_key(item)
         pipeline.hset(self._payload_key(), key,
                       self._serializer.serialize(envelope))
