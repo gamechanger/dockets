@@ -118,8 +118,6 @@ class Queue(PipelineObject):
     @PipelineObject.with_pipeline
     def push(self, item, pipeline, first_ts=None, ttl=None, envelope=None,
              max_attempts=None, attempts=0, error_classes=None):
-        if not max_attempts:
-            max_attempts = self._max_attempts
         envelope = {'first_ts': first_ts or (envelope and envelope['first_ts'])
                     or time.time(),
                     'ts': time.time(),
@@ -127,7 +125,7 @@ class Queue(PipelineObject):
                     'v': self.version,
                     'ttl': ttl,
                     'attempts': attempts,
-                    'max_attempts': max_attempts,
+                    'max_attempts': max_attempts or self._max_attempts,
                     'error_classes': pickle.dumps(error_classes)}
         serialized_envelope = self._serializer.serialize(envelope)
         if self.mode == self.FIFO:
@@ -204,19 +202,10 @@ class Queue(PipelineObject):
         item = envelope['item']
         pop_time = time.time()
         response_time = pop_time - float(envelope['first_ts'])
+        item_error_classes = self.error_classes_for_envelope(envelope)
         self._event_registrar.on_pop(item=item, item_key=self.item_key(item),
                                      response_time=response_time,
                                      pipeline=pipeline)
-
-        # this is convoluted because pickled None is truthy
-        if 'error_classes' in envelope:
-            item_error_classes = pickle.loads(envelope['error_classes'])
-            if not item_error_classes:
-                item_error_classes = self._retry_error_classes
-        else:
-            item_error_classes = self._retry_error_classes
-        if not isinstance(item_error_classes, collections.Iterable):
-            item_error_classes = tuple([item_error_classes])
 
         def handle_error():
             self._event_registrar.on_error(
@@ -254,7 +243,6 @@ class Queue(PipelineObject):
                 # When we retry, first_ts stays the same
                 try:
                     self.push(envelope['item'], pipeline=pipeline, envelope=envelope,
-                              first_ts=envelope['first_ts'],
                               max_attempts=max_attempts,
                               attempts=envelope['attempts'] + 1,
                               error_classes=item_error_classes)
@@ -280,6 +268,15 @@ class Queue(PipelineObject):
                                               pipeline=pipeline)
             pipeline.execute()
             return envelope
+
+    def error_classes_for_envelope(self, envelope):
+        def tuplify(thing):
+            return thing if isinstance(thing, collections.Iterable) else tuple([thing])
+
+        if 'error_classes' in envelope:
+            return tuplify(pickle.loads(envelope['error_classes']) or self._retry_error_classes)
+        else:
+            return tuplify(self._retry_error_classes)
 
     def add_event_handler(self, handler):
         self._event_registrar.register(handler)

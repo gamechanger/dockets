@@ -1,7 +1,6 @@
 import logging
 import time
 import pickle
-import collections
 
 from redis import WatchError
 
@@ -66,16 +65,7 @@ def create_batching_queue(superclass):
                 self.error_queue.queue_error(envelope)
 
             for envelope in envelopes_to_process:
-                # this is convoluted because pickled None is truthy
-                if 'error_classes' in envelope:
-                    item_error_classes = pickle.loads(envelope['error_classes'])
-                    if not item_error_classes:
-                        item_error_classes = self._retry_error_classes
-                else:
-                    item_error_classes = self._retry_error_classes
-                if not isinstance(item_error_classes, collections.Iterable):
-                    item_error_classes = tuple([item_error_classes])
-
+                item_error_classes = self.error_classes_for_envelope(envelope)
                 try:
                     self.process_item(envelope['item'])
                 except errors.ExpiredError:
@@ -96,7 +86,6 @@ def create_batching_queue(superclass):
                         worker_recorder.record_retry(pipeline=pipeline)
                         # When we retry, first_ts stays the same
                         self.push(envelope['item'], pipeline=pipeline, envelope=envelope,
-                                  first_ts=envelope['first_ts'],
                                   max_attempts=max_attempts,
                                   attempts=envelope['attempts'] + 1,
                                   error_classes=item_error_classes)
