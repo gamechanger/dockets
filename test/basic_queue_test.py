@@ -399,7 +399,6 @@ def run_with_one_true_should_continue_and_no_items(queue, sleep):
     queue.run_once = Mock(return_value=None)
     queue.run(should_continue=Mock(side_effect=[True, False]))
     queue.run_once.assert_called_once_with(ANY)
-    sleep.assert_called_once_with(queue._wait_time)
 
 
 @register
