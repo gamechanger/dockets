@@ -44,7 +44,7 @@ class Queue(PipelineObject):
         self.key = kwargs.get('key')
         self.version = kwargs.get('version', 1)
 
-        self._wait_time = kwargs.get('wait_time') or 60
+        self._wait_time = kwargs.get('wait_time', 60) * 1000
         self._activity_timeout = kwargs.get('timeout', 60)
         self._serializer = kwargs.get('serializer', JsonSerializer())
         self._max_attempts = kwargs.get('max_attempts', 3)
