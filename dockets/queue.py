@@ -99,8 +99,8 @@ class Queue(PipelineObject):
     def pop(self, worker_id, pipeline):
         pop_pipeline = self.redis.pipeline()
         self._record_worker_activity(worker_id, pipeline=pop_pipeline)
-        args = [self._queue_key(), self._working_queue_key(worker_id)]
-        pop_pipeline.rpoplpush(*args)
+        args = [self._queue_key(), self._working_queue_key(worker_id), self._wait_time]
+        pop_pipeline.brpoplpush(*args)
         pipeline_return_values = pop_pipeline.execute()
         serialized_envelope = pipeline_return_values[-1]
         if not serialized_envelope:
@@ -170,8 +170,8 @@ class Queue(PipelineObject):
         while True:
             if not should_continue():
                 break
-            if not self.run_once(worker_id):
-                time.sleep(self._wait_time)
+            self.run_once(worker_id)
+
 
     def register_worker(self, worker_id=None, extra_metadata={}):
         self._reclaim()
