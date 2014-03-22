@@ -107,7 +107,7 @@ class Queue(PipelineObject):
             return None
         try:
             envelope = self._serializer.deserialize(serialized_envelope)
-        except Exception as e:
+        except Exception:
             self.raw_complete(serialized_envelope, worker_id)
             self._event_registrar.on_operation_error(exc_info=sys.exc_info(),
                                                      pipeline=pipeline)
