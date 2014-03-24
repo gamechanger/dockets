@@ -7,7 +7,7 @@ def read(fname):
 
 setuptools.setup(
     name="Dockets",
-    version="0.0.39a",
+    version="0.0.40a",
     author="Doug Woos",
     author_email="doug@gamechanger.io",
     description="SUPER simple Redis-backed queueing in Python",
@@ -17,5 +17,6 @@ setuptools.setup(
     packages=["dockets"],
     long_description="LONG",
     install_requires=['simplejson','redis','python-dateutil'],
+    test_suite = 'nose.collector',
     tests_require=['nose']
 )
