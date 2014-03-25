@@ -19,37 +19,6 @@ class IsolationQueue(Queue):
     in operation.
     """
 
-    def isolated_transaction_on_exists(self, key, key_exists_cb, key_does_not_exist_cb):
-        with self.redis.pipeline() as pipeline:
-            while True:
-                try:
-                    pipeline.watch(self._entry_key(key))
-                    key_in_queue = pipeline.get(self._entry_key(key))
-                    pipeline.multi()
-                    if key_in_queue:
-                        key_exists_cb(self, pipeline)
-                    else:
-                        key_does_not_exist_cb(self, pipeline)
-                    pipeline.execute()
-                    break
-                except WatchError:
-                    continue
-
-    def isolated_transaction_on_latest(self, key, key_latest_cb, key_not_latest_cb):
-        with self.redis.pipeline() as pipeline:
-            while True:
-                try:
-                    pipeline.watch(self._entry_key(key))
-                    latest_version = pipeline.hget(self._latest_add_key(), key)
-                    pipeline.multi()
-                    if latest_version:
-                        key_latest_cb(self, pipeline, latest_version)
-                    else:
-                        key_not_latest_cb(self, pipeline, latest_version)
-                    pipeline.execute()
-                    break
-                except WatchError:
-                    continue
 
     # TODO this should use Lua scripting
     def push(self, item, **kwargs):
@@ -63,15 +32,22 @@ class IsolationQueue(Queue):
             return super(IsolationQueue, self).push(item, **kwargs)
 
         key = self.item_key(item)
-
-        def update_latest(queue, pipeline):
-            pipeline.hset(queue._latest_add_key(), key, queue._serializer.serialize(item))
-
-        def push_new(queue, pipeline):
-            super(IsolationQueue, queue).push(item, pipeline=pipeline, **kwargs)
-            pipeline.set(queue._entry_key(key), 1)
-
-        self.isolated_transaction_on_exists(key, update_latest, push_new)
+        with self.redis.pipeline() as pipeline:
+            while True:
+                try:
+                    pipeline.watch(self._entry_key(key))
+                    key_in_queue = pipeline.get(self._entry_key(key))
+                    pipeline.multi()
+                    if key_in_queue:
+                        pipeline.hset(self._latest_add_key(),
+                                      key, self._serializer.serialize(item))
+                    else:
+                        super(IsolationQueue, self).push(item, pipeline=pipeline, **kwargs)
+                        pipeline.set(self._entry_key(key), 1)
+                    pipeline.execute()
+                    break
+                except WatchError:
+                    continue
 
     def complete(self, envelope, *args, **kwargs):
         """
@@ -79,16 +55,23 @@ class IsolationQueue(Queue):
         watch.
         """
         key = self.item_key(envelope['item'])
-
-        def complete_latest(queue, pipeline, latest_version):
-            latest_version = queue._serializer.deserialize(latest_version)
-            super(IsolationQueue, queue).push(latest_version, pipeline=pipeline)
-            pipeline.hdel(queue._latest_add_key(), key)
-
-        def complete_key(queue, pipeline, latest_version):
-            pipeline.delete(queue._entry_key(key))
-
-        self.isolated_transaction_on_latest(key, complete_latest, complete_key)
+        with self.redis.pipeline() as pipeline:
+            while True:
+                try:
+                    pipeline.watch(self._entry_key(key))
+                    latest_version = pipeline.hget(self._latest_add_key(), key)
+                    pipeline.multi()
+                    if latest_version:
+                        latest_version = self._serializer.deserialize(latest_version)
+                        # we just call Queue.push since we know it's already in the queue
+                        super(IsolationQueue, self).push(latest_version, pipeline=pipeline)
+                        pipeline.hdel(self._latest_add_key(), key)
+                    else:
+                        pipeline.delete(self._entry_key(key))
+                    pipeline.execute()
+                    break
+                except WatchError:
+                    continue
         super(IsolationQueue, self).complete(envelope, *args, **kwargs)
 
     def delete(self, envelope, *args, **kwargs):

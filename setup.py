@@ -17,6 +17,5 @@ setuptools.setup(
     packages=["dockets"],
     long_description="LONG",
     install_requires=['simplejson','redis','python-dateutil'],
-    test_suite = 'nose.collector',
     tests_require=['nose']
 )
