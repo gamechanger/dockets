@@ -8,7 +8,6 @@ from mock import Mock, ANY, patch
 from util import *
 from dockets.queue import Queue
 from dockets.isolation_queue import IsolationQueue
-from dockets.batching_queue import BatchingQueue, BatchingIsolationQueue
 from dockets.docket import Docket
 from dockets.errors import ExpiredError
 
@@ -35,24 +34,6 @@ class TestQueue(Queue):
 class TestIsolationQueue(IsolationQueue):
     def __init__(self, *args, **kwargs):
         super(TestIsolationQueue, self).__init__(*args, **kwargs)
-        self.items_processed = []
-
-    def process_item(self, item):
-        default_process_item(self, item)
-
-class TestBatchingQueue(BatchingQueue):
-    def __init__(self, *args, **kwargs):
-        kwargs['batch_size'] = 1
-        super(TestBatchingQueue, self).__init__(*args, **kwargs)
-        self.items_processed = []
-
-    def process_item(self, item):
-        default_process_item(self, item)
-
-class TestBatchingIsolationQueue(BatchingIsolationQueue):
-    def __init__(self, *args, **kwargs):
-        kwargs['batch_size'] = 1
-        super(TestBatchingIsolationQueue, self).__init__(*args, **kwargs)
         self.items_processed = []
 
     def process_item(self, item):
@@ -418,6 +399,6 @@ def deserialization_error(queue):
     assert_error_queue_empty(queue)
 
 def test_all_queues():
-    for cls in (TestQueue, TestIsolationQueue, TestBatchingQueue, TestBatchingIsolationQueue, TestDocket):
+    for cls in (TestQueue, TestIsolationQueue, TestDocket):
         for test_case in all_queue_tests:
             yield test_case, make_queue(cls)
