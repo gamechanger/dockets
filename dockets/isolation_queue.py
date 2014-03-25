@@ -24,7 +24,7 @@ class IsolationQueue(Queue):
             while True:
                 try:
                     pipeline.watch(self._entry_key(key))
-                    key_in_queue = pipeline.get(self._entry_key(key))
+                    key_in_queue = self.redis.get(self._entry_key(key))
                     pipeline.multi()
                     if key_in_queue:
                         key_exists_cb(self, pipeline)
@@ -40,7 +40,7 @@ class IsolationQueue(Queue):
             while True:
                 try:
                     pipeline.watch(self._entry_key(key))
-                    latest_version = pipeline.hget(self._latest_add_key(), key)
+                    latest_version = self.redis.hget(self._latest_add_key(), key)
                     pipeline.multi()
                     if latest_version:
                         key_latest_cb(self, pipeline, latest_version)
