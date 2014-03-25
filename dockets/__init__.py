@@ -1,4 +1,4 @@
-__version__ = '0.0.40a'
+__version__ = '0.0.41a'
 
 import logging
 from dockets.logging_event_handler import LoggingEventHandler
