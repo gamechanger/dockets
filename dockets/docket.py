@@ -99,7 +99,11 @@ class Docket(Queue):
                         return None
 
                     if next_envelope['when'] > (current_time or time.time()):
+                        # Simulate a blocking call by sleeping if there is nothing returned.
+                        # This ensures we aren't hammering Redis.
+                        sleep(self._wait_time)
                         return None
+
                     pop_pipeline.multi()
                     pop_pipeline.zrem(self._queue_key(), next_envelope_key)
                     pop_pipeline.hdel(self._payload_key(), next_envelope_key)
