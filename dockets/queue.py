@@ -100,9 +100,8 @@ class Queue(PipelineObject):
         pop_pipeline = self.redis.pipeline()
         self._record_worker_activity(worker_id, pipeline=pop_pipeline)
         args = [self._queue_key(), self._working_queue_key(worker_id), self._wait_time]
-        pop_pipeline.brpoplpush(*args)
-        pipeline_return_values = pop_pipeline.execute()
-        serialized_envelope = pipeline_return_values[-1]
+        pop_pipeline.execute()
+        serialized_envelope = self.redis.brpoplpush(*args)
         if not serialized_envelope:
             return None
         try:
