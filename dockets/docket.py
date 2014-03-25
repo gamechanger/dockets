@@ -8,7 +8,7 @@ import pickle
 
 import dateutil.parser
 from redis import WatchError
-
+from time import sleep
 from dockets import errors
 from dockets.pipeline import PipelineObject
 from dockets.queue import Queue
@@ -77,7 +77,10 @@ class Docket(Queue):
                     try:
                         next_envelope_key = pop_pipeline.zrange(self._queue_key(), 0, 1)[0]
                     except IndexError:
-                        return None
+                        # Simulate a blocking ZRANGE by sleeping if there is nothing returned.
+                        # This ensures we aren't hammering Redis.
+                        sleep(self._wait_time)
+                        return
 
                     next_envelope_json = pop_pipeline.hget(self._payload_key(),
                                                            next_envelope_key)
