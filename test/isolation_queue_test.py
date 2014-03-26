@@ -1,4 +1,5 @@
 import simplejson
+from mock import Mock
 
 from util import *
 from dockets.isolation_queue import IsolationQueue
@@ -25,6 +26,46 @@ class TestIsolationQueueWithKey(IsolationQueue):
 
 def make_queue():
     return TestIsolationQueueWithKey(redis, 'test')
+
+@clear
+def test_isolated_transaction_on_exists_when_exists():
+    queue = make_queue()
+    queue.push({'a': 1})
+    key_exists_cb = Mock()
+    key_does_not_exist_cb = Mock()
+    queue.isolated_transaction_on_exists('1', key_exists_cb, key_does_not_exist_cb)
+    assert key_exists_cb.called
+    assert not key_does_not_exist_cb.called
+
+@clear
+def test_isolated_transaction_on_exists_when_not_exists():
+    queue = make_queue()
+    key_exists_cb = Mock()
+    key_does_not_exist_cb = Mock()
+    queue.isolated_transaction_on_exists('1', key_exists_cb, key_does_not_exist_cb)
+    assert not key_exists_cb.called
+    assert key_does_not_exist_cb.called
+
+@clear
+def test_isolated_transaction_on_latest_when_latest():
+    queue = make_queue()
+    queue.push({'a': 1})
+    queue.push({'a': 1})
+    key_latest_cb = Mock()
+    key_not_latest_cb = Mock()
+    queue.isolated_transaction_on_latest('1', key_latest_cb, key_not_latest_cb)
+    assert key_latest_cb.called
+    assert not key_not_latest_cb.called
+
+@clear
+def test_isolated_transaction_on_latest_when_not_latest():
+    queue = make_queue()
+    queue.push({'a': 1})
+    key_latest_cb = Mock()
+    key_not_latest_cb = Mock()
+    queue.isolated_transaction_on_latest('1', key_latest_cb, key_not_latest_cb)
+    assert not key_latest_cb.called
+    assert key_not_latest_cb.called
 
 @clear
 def test_push_once():
