@@ -164,6 +164,7 @@ class Queue(PipelineObject):
 
     def run(self, worker_id=None, extra_metadata={}, should_continue=None):
         worker_id = self.register_worker(worker_id, extra_metadata)
+        self.worker_id = worker_id
         self.pre_run()
         should_continue = should_continue or (lambda: True)
         while True:
