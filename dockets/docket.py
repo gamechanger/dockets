@@ -63,7 +63,6 @@ class Docket(Queue):
     @PipelineObject.with_pipeline
     def pop(self, pipeline, current_time=None):
         next_envelope = None
-        self._record_worker_activity()
         with self.redis.pipeline() as pop_pipeline:
             while True:
                 try:

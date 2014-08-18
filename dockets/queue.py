@@ -4,7 +4,10 @@ import uuid
 import time
 import pickle
 import collections
+import math
 
+from threading import Thread
+from time import sleep
 from dockets import errors, _global_event_handler_classes, _global_retry_error_classes
 from dockets.pipeline import PipelineObject
 from dockets.metadata import WorkerMetadataRecorder
@@ -49,6 +52,7 @@ class Queue(PipelineObject):
         self._activity_timeout = kwargs.get('timeout', 60)
         self._serializer = kwargs.get('serializer', JsonSerializer())
         self._max_attempts = kwargs.get('max_attempts', 3)
+        self._heartbeat_interval = kwargs.get('heartbeat_interval', 5)
 
         # register event handlers
         self._event_registrar = QueueEventRegistrar(self)
@@ -93,7 +97,6 @@ class Queue(PipelineObject):
     @PipelineObject.with_pipeline
     def pop(self, pipeline):
         pop_pipeline = self.redis.pipeline()
-        self._record_worker_activity(pipeline=pop_pipeline)
         args = [self._queue_key(), self._working_queue_key(), self._wait_time]
         pop_pipeline.execute()
         serialized_envelope = self.redis.brpoplpush(*args)
@@ -157,11 +160,47 @@ class Queue(PipelineObject):
         """
         pipeline.lrem(self._working_queue_key(), serialized_envelope)
 
+    @PipelineObject.with_pipeline
+    def _heartbeat(self, pipeline):
+        """
+        Pushes out this worker's timeout.
+        """
+        pipeline.sadd(self._workers_set_key(), self.worker_id)
+        pipeline.setex(self._worker_activity_key(), 1,
+                       int(math.ceil(self._heartbeat_interval * 5)))
+
+    def _run_heartbeat(self, stop):
+        """
+        Performs a "heartbeat" every 5 seconds. In practice this just pushes out
+        the expiry on this worker's activity key to ensure its items are not
+        reclaimed.
+        """
+        while True:
+            if stop():
+                break
+            self._heartbeat()
+            sleep(self._heartbeat_interval)
+
     def run(self, should_continue=None):
         self.register_worker()
         should_continue = should_continue or (lambda: True)
+
+        stopping = False
+
+        def run_heartbeat():
+
+            def stop():
+                return stopping
+
+            self._run_heartbeat(stop)
+
+        heartbeat_thread = Thread(target=run_heartbeat)
+        heartbeat_thread.start()
+
         while True:
             if not should_continue():
+                stopping = True
+                heartbeat_thread.join(self._heartbeat_interval * 2)
                 break
             self.run_once()
 
@@ -299,12 +338,6 @@ class Queue(PipelineObject):
         return 'queue.{0}.{1}.active'.format(self.name, self.worker_id)
 
     ## worker handling
-
-    @PipelineObject.with_pipeline
-    def _record_worker_activity(self, pipeline):
-        pipeline.sadd(self._workers_set_key(), self.worker_id)
-        pipeline.setex(self._worker_activity_key(), 1,
-                       self._activity_timeout)
 
     # TODO rewrite using lua scripting
     def _reclaim(self):
