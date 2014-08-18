@@ -275,15 +275,6 @@ class Queue(PipelineObject):
 
     ## reporting
 
-    def active_worker_metadata(self):
-        data = {}
-        for worker_id in self.redis.smembers(self._workers_set_key()):
-            worker_metadata = WorkerMetadataRecorder(self.redis, self._queue_key(), worker_id).all_data()
-            worker_metadata['working'] = self.redis.llen(self._working_queue_key(worker_id))
-            worker_metadata['active'] = self.redis.exists(self._worker_activity_key(worker_id))
-            data[worker_id] = worker_metadata
-        return data
-
     def working(self):
         return sum(self.redis.llen(self._working_queue_key(worker_id))
                    for worker_id

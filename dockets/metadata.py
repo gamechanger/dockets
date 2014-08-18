@@ -98,6 +98,3 @@ class WorkerMetadataRecorder(PipelineObject):
         pipeline.hincrby(self._key_name(), 'expire', 1)
         pipeline.hset(self._key_name(), 'last_expire_ts', time.time())
         pipeline.expire(self._key_name(), METADATA_TIMEOUT)
-
-    def all_data(self):
-        return self.redis.hgetall(self._key_name())
