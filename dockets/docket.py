@@ -84,8 +84,6 @@ class Docket(Queue):
 
                     next_envelope_json = pop_pipeline.hget(self._payload_key(),
                                                            next_envelope_key)
-                    deserialization_failure = False
-
                     try:
                         next_envelope = self._serializer.deserialize(next_envelope_json)
                     except:
