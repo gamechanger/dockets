@@ -170,7 +170,7 @@ class Queue(PipelineObject):
                        int(math.ceil(self._heartbeat_interval * 5)))
 
 
-    def _heartbeat_thread(self, should_stop):
+    def _start_heartbeat_thread(self, should_stop):
         """
         Performs a "heartbeat" every interval. In practice this just pushes out
         the expiry on this worker's activity key to ensure its items are not
@@ -178,12 +178,18 @@ class Queue(PipelineObject):
         """
         def run_heartbeat():
             while True:
+                sleep(self._heartbeat_interval)
                 if should_stop():
                     break
                 self._heartbeat()
-                sleep(self._heartbeat_interval)
 
-        return Thread(target=run_heartbeat)
+        # Do an initial heartbeat to avoid any race conditions. Subsequent
+        # heartbeats will happen in the background thread.
+        self._heartbeat()
+
+        thread = Thread(target=run_heartbeat)
+        thread.start()
+        return thread
 
     def run(self, should_continue=None):
         self.register_worker()
@@ -191,8 +197,7 @@ class Queue(PipelineObject):
 
         stopping = False
 
-        heartbeat_thread = self._heartbeat_thread(lambda: stopping)
-        heartbeat_thread.start()
+        heartbeat_thread = self._start_heartbeat_thread(lambda: stopping)
 
         while True:
             if not should_continue():

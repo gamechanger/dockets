@@ -116,8 +116,7 @@ def register_worker(queue):
 @register
 def heartbeat_thread(queue):
     stopping = False
-    thread = queue._heartbeat_thread(lambda: stopping)
-    thread.start()
+    thread = queue._start_heartbeat_thread(lambda: stopping)
     sleep(0.05)
     stopping = True
     thread.join(0.02)
