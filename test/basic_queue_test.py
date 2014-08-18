@@ -124,6 +124,18 @@ def heartbeat_thread(queue):
     assert not thread.isAlive()
 
 @register
+def heartbeats(queue):
+    queue._heartbeat()
+    assert redis.exists('queue.test.test_worker.active')
+    assert redis.sismember('queue.test.workers', 'test_worker')
+    assert redis.ttl('queue.test.test_worker.active') == 1
+    sleep(0.9)
+    queue._heartbeat()
+    sleep(0.2)
+    assert redis.ttl('queue.test.test_worker.active') == 1
+
+
+@register
 def push_once_run_once(queue):
     queue.push({'a': 1})
     queue.register_worker()
