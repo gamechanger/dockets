@@ -1,8 +1,5 @@
 import logging
-
 from redis import WatchError
-
-from dockets.pipeline import PipelineObject
 from dockets.queue import Queue
 
 

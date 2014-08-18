@@ -1,19 +1,15 @@
 import sys
-import logging
 import time
 from datetime import datetime
-from numbers import Number
-import uuid
 import pickle
 
 import dateutil.parser
 from redis import WatchError
 from time import sleep
-from dockets import errors
+
 from dockets.pipeline import PipelineObject
 from dockets.queue import Queue
-from dockets.json_serializer import JsonSerializer
-from dockets.metadata import TimeTracker
+
 
 class Docket(Queue):
     def _payload_key(self):
@@ -39,9 +35,7 @@ class Docket(Queue):
         key = self.item_key(item)
         pipeline.hset(self._payload_key(), key,
                       self._serializer.serialize(envelope))
-        n_added = pipeline.zadd(self._queue_key(),
-                                key,
-                                timestamp)
+        pipeline.zadd(self._queue_key(), key, timestamp)
         self._event_registrar.on_push(
             item=item,
             item_key=key,
@@ -155,7 +149,4 @@ class Docket(Queue):
         except:
             raise TypeError('Invalid time specification', when)
 
-class TestDocket(Queue):
-    def process_item(self, item):
-        time.sleep(2)
-        logging.info('in process_item, processing {0}'.format(item))
+

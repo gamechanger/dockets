@@ -3,7 +3,7 @@ from multiprocessing import Process
 
 import simplejson
 from nose import with_setup
-from mock import Mock, ANY, patch
+from mock import Mock, patch
 
 from util import *
 from dockets.queue import Queue
