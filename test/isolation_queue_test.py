@@ -97,7 +97,7 @@ def test_push_twice_same_key_run_once():
     queue = make_queue()
     queue.push({'a': 1, 'b': 1})
     queue.push({'a': 1, 'b': 2})
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     assert queue.queued() == 1
     assert redis.get('queue.test.entry.1') == '1'
     assert not queue.redis.hgetall('queue.test.latest')
@@ -108,8 +108,8 @@ def test_push_twice_same_key_run_twice():
     queue = make_queue()
     queue.push({'a': 1, 'b': 1})
     queue.push({'a': 1, 'b': 2})
-    queue.run_once(worker_id='test_worker')
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
+    queue.run_once()
     assert queue.queued() == 0
     assert not redis.get('queue.test.entry.1')
     assert not redis.hgetall('queue.test.latest')
@@ -119,12 +119,12 @@ def test_push_twice_same_key_run_twice():
 def test_delete_from_error_queue():
     queue = make_queue()
     queue.push({'a': 1, 'b': 1, 'action': 'error'})
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     assert queue.queued() == 0
     assert queue.error_queue.length() == 1
     queue.error_queue.delete_error(queue.error_queue.error_ids()[0])
     queue.push({'a': 1, 'b': 2})
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     assert queue.queued() == 0
     assert not redis.get('queue.test.entry.1')
     assert not redis.hgetall('queue.test.latest')

@@ -52,9 +52,11 @@ def clear_redis():
     redis.flushdb()
 
 def make_queue(cls):
-    return cls(redis, 'test', use_error_queue=True,
+    queue = cls(redis, 'test', use_error_queue=True,
                retry_error_classes=[TestRetryError],
                max_attempts=5, wait_time=1)
+    queue.worker_id = 'test_worker'
+    return queue
 
 all_queue_tests = []
 
@@ -65,8 +67,8 @@ def register(fn):
 # queue tests
 @register
 def run_once(queue):
-    queue.register_worker(worker_id='test_worker')
-    queue.run_once(worker_id='test_worker')
+    queue.register_worker()
+    queue.run_once()
     assert redis.exists('queue.test.test_worker.active')
     assert redis.sismember('queue.test.workers', 'test_worker')
     assert_error_queue_empty(queue)
@@ -90,7 +92,7 @@ def push_twice(queue):
 @register
 def push_once_pop_once(queue):
     queue.push({'a': 1})
-    queue.pop(worker_id='test_worker')
+    queue.pop()
     assert queue.queued() == 0
     assert redis.llen('queue.test.test_worker.working') == 1
     assert_queue_entry(queue.redis.lindex('queue.test.test_worker.working', 0), {'a': 1})
@@ -101,15 +103,15 @@ def push_once_pop_once(queue):
 @register
 def push_once_pop_once_complete_once(queue):
     queue.push({'a': 1})
-    item = queue.pop(worker_id='test_worker')
-    queue.complete(item, worker_id='test_worker')
+    item = queue.pop()
+    queue.complete(item)
     assert queue.queued() == 0
     assert redis.llen('queue.test.test_worker.working') == 0
     assert_error_queue_empty(queue)
 
 @register
 def register_worker(queue):
-    queue.register_worker('test_worker')
+    queue.register_worker()
     metadata = redis.hgetall('queue.test.test_worker.metadata')
     assert metadata
     assert 'hostname' in metadata
@@ -118,8 +120,8 @@ def register_worker(queue):
 @register
 def push_once_run_once(queue):
     queue.push({'a': 1})
-    queue.register_worker(worker_id='test_worker')
-    queue.run_once(worker_id='test_worker')
+    queue.register_worker()
+    queue.run_once()
     assert queue.items_processed == [{'a': 1}]
     assert redis.exists('queue.test.test_worker.active')
     assert queue.queued() == 0
@@ -134,7 +136,7 @@ def push_once_run_once(queue):
 def push_twice_run_once(queue):
     queue.push({'a': 1})
     queue.push({'b': 2})
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     assert queue.queued() == 1
     assert_error_queue_empty(queue)
 
@@ -142,8 +144,8 @@ def push_twice_run_once(queue):
 def push_twice_run_twice(queue):
     queue.push({'a': 1})
     queue.push({'b': 2})
-    queue.run_once(worker_id='test_worker')
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
+    queue.run_once()
 
     assert queue.items_processed == [{'a': 1}, {'b': 2}]
     assert redis.exists('queue.test.test_worker.active')
@@ -159,7 +161,7 @@ def push_twice_run_twice(queue):
 @register
 def run_retry_item(queue):
     queue.push({'action': 'retry', 'message': 'Retry Error!'})
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     assert not queue.items_processed
     assert queue.queued() == 1
     assert_queue_entry(queue.queued_items()[0], {'action': 'retry', 'message': 'Retry Error!'})
@@ -175,12 +177,12 @@ def run_retry_item(queue):
 def run_retry_item_3x_queue_default_retry(queue):
     queue.push({'action': 'retry', 'message': 'Retry Error!'})
     for _ in range(2):
-        queue.run_once(worker_id='test_worker')
+        queue.run_once()
     assert not queue.items_processed
     assert queue.queued() == 1
 
     error_queue = queue.error_queue
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     assert queue.queued() == 1
     assert error_queue.length() == 0
 
@@ -188,11 +190,11 @@ def run_retry_item_3x_queue_default_retry(queue):
 def run_retry_item_3x_per_item_retry(queue):
     queue.push({'action': 'retry', 'message': 'Retry Error!'}, max_attempts=3)
     for _ in range(2):
-        queue.run_once(worker_id='test_worker')
+        queue.run_once()
     assert not queue.items_processed
     assert queue.queued() == 1
 
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     error_queue = queue.error_queue
     assert queue.queued() == 0
     assert error_queue.length() == 1
@@ -200,7 +202,7 @@ def run_retry_item_3x_per_item_retry(queue):
 @register
 def run_error_item_queue_default_errors(queue):
     queue.push({'action': 'error', 'message': 'Error!'})
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     assert not queue.items_processed
     assert queue.queued() == 0
     error_queue = queue.error_queue
@@ -209,7 +211,7 @@ def run_error_item_queue_default_errors(queue):
 @register
 def run_error_item_per_item_errors(queue):
     queue.push({'action': 'error', 'message': 'Error!'}, error_classes=Exception)
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     assert not queue.items_processed
     assert queue.queued() == 1
     error_queue = queue.error_queue
@@ -219,12 +221,12 @@ def run_error_item_per_item_errors(queue):
 def run_retry_item_5x(queue):
     queue.push({'action': 'retry', 'message': 'Retry Error!'})
     for _ in range(4):
-        queue.run_once(worker_id='test_worker')
+        queue.run_once()
 
     assert not queue.items_processed
     assert queue.queued() == 1
 
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
 
     assert queue.queued() == 0
     metadata = redis.hgetall('queue.test.test_worker.metadata')
@@ -253,7 +255,7 @@ def run_retry_item_5x(queue):
 @register
 def run_expire_item(queue):
     queue.push({'action': 'expire'})
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     assert not queue.items_processed
     assert queue.queued() == 0
     assert_error_queue_empty(queue)
@@ -267,7 +269,7 @@ def run_expire_item(queue):
 @register
 def run_error_item(queue):
     queue.push({'action': 'error', 'message': 'Error!'})
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     assert not queue.items_processed
     assert queue.queued() == 0
     metadata = redis.hgetall('queue.test.test_worker.metadata')
@@ -297,7 +299,7 @@ def run_error_item(queue):
 @register
 def run_error_item_and_requeue(queue):
     queue.push({'action': 'error', 'message': 'Error!'})
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     queue.error_queue.requeue_error(queue.error_queue.errors()[0]['id'])
     assert not queue.items_processed
     assert queue.queued() == 1
@@ -308,7 +310,7 @@ def run_error_item_and_requeue(queue):
 def run_multiple_error_items_and_requeue_all(queue):
     for i in range(5):
         queue.push({'action': 'error', 'message': 'Error{}'.format(i)})
-        queue.run_once(worker_id='test_worker')
+        queue.run_once()
     queue.error_queue.requeue_all_errors()
     assert not queue.items_processed
     assert queue.queued() == 5
@@ -317,7 +319,7 @@ def run_multiple_error_items_and_requeue_all(queue):
 @register
 def run_error_item_and_delete(queue):
     queue.push({'action': 'error', 'message': 'Error!'})
-    queue.run_once(worker_id='test_worker')
+    queue.run_once()
     queue.error_queue.delete_error(queue.error_queue.errors()[0]['id'])
     assert not queue.items_processed
     assert queue.queued() == 0
@@ -326,15 +328,15 @@ def run_error_item_and_delete(queue):
 @register
 def push_once_pop_once_reclaim(queue):
     queue.push({'a': 1})
-    queue.pop(worker_id='test_worker')
+    queue.pop()
     queue._reclaim()
     assert queue.queued() == 0
 
 @register
 def push_once_reclaim_once_unset_worker_key_reclaim(queue):
     queue.push({'a': 1})
-    queue.pop(worker_id='test_worker')
-    redis.delete(queue._worker_activity_key('test_worker'))
+    queue.pop()
+    redis.delete(queue._worker_activity_key())
     queue._reclaim()
     assert queue.queued() == 1
     assert_queue_entry(queue.queued_items()[0], {'a': 1})
@@ -344,7 +346,7 @@ def run_bad_worker(queue):
     def bad_process_item(item):
         os._exit(0)
     queue.process_item = bad_process_item
-    queue.run_once('test_worker')
+    queue.run_once()
 
 @register
 def push_once_run_bad_worker_unset_worker_key_reclaim(queue):
@@ -352,7 +354,7 @@ def push_once_run_bad_worker_unset_worker_key_reclaim(queue):
     p.start()
     p.join()
     assert queue.queued() == 0
-    redis.delete(queue._worker_activity_key('test_worker'))
+    redis.delete(queue._worker_activity_key())
     queue._reclaim()
     assert queue.queued() == 1
 
@@ -369,7 +371,7 @@ def run_with_constant_false_should_continue(queue, sleep):
 def run_with_one_true_should_continue(queue, sleep):
     queue.run_once = Mock(return_value=True)
     queue.run(should_continue=Mock(side_effect=[True, False]))
-    queue.run_once.assert_called_once_with(ANY)
+    queue.run_once.assert_called_once_with()
     assert not sleep.called
 
 @register
@@ -377,7 +379,7 @@ def run_with_one_true_should_continue(queue, sleep):
 def run_with_one_true_should_continue_and_no_items(queue, sleep):
     queue.run_once = Mock(return_value=None)
     queue.run(should_continue=Mock(side_effect=[True, False]))
-    queue.run_once.assert_called_once_with(ANY)
+    queue.run_once.assert_called_once_with()
 
 
 @register
@@ -391,7 +393,7 @@ def deserialization_error(queue):
 
     queue._serializer = ErroringSerializer()
     queue.push({'a': 1})
-    queue.pop(worker_id='test_worker')
+    queue.pop()
     assert queue.queued() == 0
     assert redis.llen('queue.test.test_worker.working') == 0
     assert_error_queue_empty(queue)

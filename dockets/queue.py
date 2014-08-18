@@ -43,6 +43,7 @@ class Queue(PipelineObject):
         assert self.mode in [self.FIFO, self.LIFO], 'Invalid mode'
         self.key = kwargs.get('key')
         self.version = kwargs.get('version', 1)
+        self.worker_id = uuid.uuid1()
 
         self._wait_time = kwargs.get('wait_time') or 10
         self._activity_timeout = kwargs.get('timeout', 60)
@@ -90,10 +91,10 @@ class Queue(PipelineObject):
     ## public methods
 
     @PipelineObject.with_pipeline
-    def pop(self, worker_id, pipeline):
+    def pop(self, pipeline):
         pop_pipeline = self.redis.pipeline()
-        self._record_worker_activity(worker_id, pipeline=pop_pipeline)
-        args = [self._queue_key(), self._working_queue_key(worker_id), self._wait_time]
+        self._record_worker_activity(pipeline=pop_pipeline)
+        args = [self._queue_key(), self._working_queue_key(), self._wait_time]
         pop_pipeline.execute()
         serialized_envelope = self.redis.brpoplpush(*args)
         if not serialized_envelope:
@@ -101,7 +102,7 @@ class Queue(PipelineObject):
         try:
             envelope = self._serializer.deserialize(serialized_envelope)
         except Exception:
-            self.raw_complete(serialized_envelope, worker_id)
+            self.raw_complete(serialized_envelope)
             self._event_registrar.on_operation_error(exc_info=sys.exc_info(),
                                                      pipeline=pipeline)
             return None
@@ -133,11 +134,11 @@ class Queue(PipelineObject):
 
 
     @PipelineObject.with_pipeline
-    def complete(self, envelope, worker_id, pipeline):
+    def complete(self, envelope, pipeline):
         """
         Basic queue complete doesn't use the envelope--we always just lpop
         """
-        pipeline.lpop(self._working_queue_key(worker_id))
+        pipeline.lpop(self._working_queue_key())
 
 
     def delete(self, envelope, *args, **kwargs):
@@ -149,42 +150,39 @@ class Queue(PipelineObject):
 
 
     @PipelineObject.with_pipeline
-    def raw_complete(self, serialized_envelope, worker_id, pipeline):
+    def raw_complete(self, serialized_envelope, pipeline):
         """
         Just removes the envelope from working. Used in error-recovery
         cases where we just want to bail out
         """
-        pipeline.lrem(self._working_queue_key(worker_id), serialized_envelope)
+        pipeline.lrem(self._working_queue_key(), serialized_envelope)
 
-    def run(self, worker_id=None, should_continue=None):
-        worker_id = self.register_worker(worker_id)
+    def run(self, should_continue=None):
+        self.register_worker()
         should_continue = should_continue or (lambda: True)
         while True:
             if not should_continue():
                 break
-            self.run_once(worker_id)
+            self.run_once()
 
 
-    def register_worker(self, worker_id=None):
+    def register_worker(self):
         self._reclaim()
 
-        # set up this worker
-        worker_id = worker_id or uuid.uuid1()
         worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
-                                                 worker_id)
+                                                 self.worker_id)
         worker_recorder.record_initial_metadata()
-        return worker_id
 
 
-    def run_once(self, worker_id):
+    def run_once(self):
         """
         Run the queue for one step.
         """
         worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
-                                                 worker_id)
+                                                 self.worker_id)
         # The Big Pipeline
         pipeline = self.redis.pipeline()
-        envelope = self.pop(worker_id, pipeline=pipeline)
+        envelope = self.pop(pipeline=pipeline)
 
         if not envelope:
             self._event_registrar.on_empty(pipeline=pipeline)
@@ -250,7 +248,7 @@ class Queue(PipelineObject):
                 pretty_printed_item=self.pretty_printer(item))
             worker_recorder.record_success(pipeline=pipeline)
         finally:
-            self.complete(envelope, worker_id, pipeline=pipeline)
+            self.complete(envelope, pipeline=pipeline)
             complete_time = time.time()
             turnaround_time = complete_time - float(envelope['first_ts'])
             processing_time = complete_time - pop_time
@@ -276,7 +274,7 @@ class Queue(PipelineObject):
     ## reporting
 
     def working(self):
-        return sum(self.redis.llen(self._working_queue_key(worker_id))
+        return sum(self.redis.llen(self._working_queue_key())
                    for worker_id
                    in self.redis.smembers(self._workers_set_key()))
 
@@ -294,25 +292,25 @@ class Queue(PipelineObject):
     def _workers_set_key(self):
         return 'queue.{0}.workers'.format(self.name)
 
-    def _working_queue_key(self, worker_id):
-        return 'queue.{0}.{1}.working'.format(self.name, worker_id)
+    def _working_queue_key(self, worker_id=None):
+        return 'queue.{0}.{1}.working'.format(self.name, worker_id or self.worker_id)
 
-    def _worker_activity_key(self, worker_id):
-        return 'queue.{0}.{1}.active'.format(self.name, worker_id)
+    def _worker_activity_key(self):
+        return 'queue.{0}.{1}.active'.format(self.name, self.worker_id)
 
     ## worker handling
 
     @PipelineObject.with_pipeline
-    def _record_worker_activity(self, worker_id, pipeline):
-        pipeline.sadd(self._workers_set_key(), worker_id)
-        pipeline.setex(self._worker_activity_key(worker_id), 1,
+    def _record_worker_activity(self, pipeline):
+        pipeline.sadd(self._workers_set_key(), self.worker_id)
+        pipeline.setex(self._worker_activity_key(), 1,
                        self._activity_timeout)
 
     # TODO rewrite using lua scripting
     def _reclaim(self):
         workers = self.redis.smembers(self._workers_set_key())
         for worker_id in workers:
-            if not self.redis.exists(self._worker_activity_key(worker_id)):
+            if not self.redis.exists(self._worker_activity_key()):
                 self._reclaim_worker_queue(worker_id)
                 self.redis.srem(self._workers_set_key(), worker_id)
 
