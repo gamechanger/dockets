@@ -77,12 +77,6 @@ class Queue(PipelineObject):
         """
         raise NotImplementedError
 
-    def pre_run(self):
-        """
-        Provides a hook that will be executed before the queue is run
-        """
-        pass
-
     def pretty_printer(self, item):
         return self.item_key(item)
 
@@ -164,7 +158,6 @@ class Queue(PipelineObject):
 
     def run(self, worker_id=None, extra_metadata={}, should_continue=None):
         worker_id = self.register_worker(worker_id, extra_metadata)
-        self.pre_run()
         should_continue = should_continue or (lambda: True)
         while True:
             if not should_continue():
