@@ -169,17 +169,21 @@ class Queue(PipelineObject):
         pipeline.setex(self._worker_activity_key(), 1,
                        int(math.ceil(self._heartbeat_interval * 5)))
 
-    def _run_heartbeat(self, stop):
+
+    def _heartbeat_thread(self, should_stop):
         """
-        Performs a "heartbeat" every 5 seconds. In practice this just pushes out
+        Performs a "heartbeat" every interval. In practice this just pushes out
         the expiry on this worker's activity key to ensure its items are not
         reclaimed.
         """
-        while True:
-            if stop():
-                break
-            self._heartbeat()
-            sleep(self._heartbeat_interval)
+        def run_heartbeat():
+            while True:
+                if should_stop():
+                    break
+                self._heartbeat()
+                sleep(self._heartbeat_interval)
+
+        return Thread(target=run_heartbeat)
 
     def run(self, should_continue=None):
         self.register_worker()
@@ -187,21 +191,17 @@ class Queue(PipelineObject):
 
         stopping = False
 
-        def run_heartbeat():
-
-            def stop():
-                return stopping
-
-            self._run_heartbeat(stop)
-
-        heartbeat_thread = Thread(target=run_heartbeat)
+        heartbeat_thread = self._heartbeat_thread(lambda: stopping)
         heartbeat_thread.start()
 
         while True:
             if not should_continue():
                 stopping = True
+
+            if stopping:
                 heartbeat_thread.join(self._heartbeat_interval * 2)
                 break
+
             self.run_once()
 
 

@@ -1,6 +1,6 @@
 import os
 from multiprocessing import Process
-
+from time import sleep
 import simplejson
 from nose import with_setup
 from mock import Mock, patch
@@ -114,8 +114,14 @@ def register_worker(queue):
     assert 'start_ts' in metadata
 
 @register
-def run_heartbeat(queue):
-    queue._run_heartbeat(stop=Mock(side_effect=[False, False, True]))
+def heartbeat_thread(queue):
+    stopping = False
+    thread = queue._heartbeat_thread(lambda: stopping)
+    thread.start()
+    sleep(0.05)
+    stopping = True
+    thread.join(0.02)
+    assert not thread.isAlive()
 
 @register
 def push_once_run_once(queue):
