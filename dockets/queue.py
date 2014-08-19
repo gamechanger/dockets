@@ -336,8 +336,3 @@ SERIALIZATION = Queue.SERIALIZATION
 DESERIALIZATION = Queue.DESERIALIZATION
 
 
-
-class TestQueue(Queue):
-    def process_item(self, item):
-        time.sleep(2)
-        logging.info('in process_item, processing {0}'.format(item))

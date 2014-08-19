@@ -66,7 +66,7 @@ class StatGatherer(object):
 
     def on_remove(self, pipeline, **kwargs):
         self._update_timestamp('last_remove', pipeline)
-        
+
     def on_expire(self, pipeline, **kwargs):
         self._update_timestamp('last_expire', pipeline)
         self._expire_tracker.count(pipeline=pipeline)
