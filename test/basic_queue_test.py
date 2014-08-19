@@ -122,9 +122,8 @@ def push_once_run_once(queue):
     queue.run_once(worker_id='test_worker')
     assert queue.items_processed == [{'a': 1}]
     assert redis.exists('queue.test.test_worker.active')
-    assert 'test_worker' in queue.active_worker_metadata()
     assert queue.queued() == 0
-    metadata = queue.active_worker_metadata()['test_worker']
+    metadata = redis.hgetall('queue.test.test_worker.metadata')
     assert metadata
     assert 'start_ts' in metadata
     print metadata
@@ -148,10 +147,9 @@ def push_twice_run_twice(queue):
 
     assert queue.items_processed == [{'a': 1}, {'b': 2}]
     assert redis.exists('queue.test.test_worker.active')
-    assert 'test_worker' in queue.active_worker_metadata()
     assert queue.queued() == 0
     assert_error_queue_empty(queue)
-    metadata = queue.active_worker_metadata()['test_worker']
+    metadata = redis.hgetall('queue.test.test_worker.metadata')
     assert metadata
     assert 'last_success_ts' in metadata
     assert int(metadata['success']) == 2
@@ -166,7 +164,7 @@ def run_retry_item(queue):
     assert queue.queued() == 1
     assert_queue_entry(queue.queued_items()[0], {'action': 'retry', 'message': 'Retry Error!'})
     assert_error_queue_empty(queue)
-    metadata = queue.active_worker_metadata()['test_worker']
+    metadata = redis.hgetall('queue.test.test_worker.metadata')
     assert metadata
     assert 'last_retry_ts' in metadata
     assert int(metadata['retry']) == 1
@@ -229,7 +227,7 @@ def run_retry_item_5x(queue):
     queue.run_once(worker_id='test_worker')
 
     assert queue.queued() == 0
-    metadata = queue.active_worker_metadata()['test_worker']
+    metadata = redis.hgetall('queue.test.test_worker.metadata')
     assert metadata
     assert 'last_retry_ts' in metadata
     assert int(metadata['retry']) == 4
@@ -259,7 +257,7 @@ def run_expire_item(queue):
     assert not queue.items_processed
     assert queue.queued() == 0
     assert_error_queue_empty(queue)
-    metadata = queue.active_worker_metadata()['test_worker']
+    metadata = redis.hgetall('queue.test.test_worker.metadata')
     assert metadata
     assert 'last_expire_ts' in metadata
     assert int(metadata['expire']) == 1
@@ -272,7 +270,7 @@ def run_error_item(queue):
     queue.run_once(worker_id='test_worker')
     assert not queue.items_processed
     assert queue.queued() == 0
-    metadata = queue.active_worker_metadata()['test_worker']
+    metadata = redis.hgetall('queue.test.test_worker.metadata')
     assert metadata
     assert 'last_error_ts' in metadata
     assert int(metadata['error']) == 1

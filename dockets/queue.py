@@ -156,8 +156,8 @@ class Queue(PipelineObject):
         """
         pipeline.lrem(self._working_queue_key(worker_id), serialized_envelope)
 
-    def run(self, worker_id=None, extra_metadata={}, should_continue=None):
-        worker_id = self.register_worker(worker_id, extra_metadata)
+    def run(self, worker_id=None, should_continue=None):
+        worker_id = self.register_worker(worker_id)
         should_continue = should_continue or (lambda: True)
         while True:
             if not should_continue():
@@ -165,14 +165,14 @@ class Queue(PipelineObject):
             self.run_once(worker_id)
 
 
-    def register_worker(self, worker_id=None, extra_metadata={}):
+    def register_worker(self, worker_id=None):
         self._reclaim()
 
         # set up this worker
         worker_id = worker_id or uuid.uuid1()
         worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
                                                  worker_id)
-        worker_recorder.record_initial_metadata(extra_metadata)
+        worker_recorder.record_initial_metadata()
         return worker_id
 
 
@@ -275,15 +275,6 @@ class Queue(PipelineObject):
 
     ## reporting
 
-    def active_worker_metadata(self):
-        data = {}
-        for worker_id in self.redis.smembers(self._workers_set_key()):
-            worker_metadata = WorkerMetadataRecorder(self.redis, self._queue_key(), worker_id).all_data()
-            worker_metadata['working'] = self.redis.llen(self._working_queue_key(worker_id))
-            worker_metadata['active'] = self.redis.exists(self._worker_activity_key(worker_id))
-            data[worker_id] = worker_metadata
-        return data
-
     def working(self):
         return sum(self.redis.llen(self._working_queue_key(worker_id))
                    for worker_id
@@ -310,12 +301,6 @@ class Queue(PipelineObject):
         return 'queue.{0}.{1}.active'.format(self.name, worker_id)
 
     ## worker handling
-
-    def _worker_metadata(self, extra_metadata):
-        metadata = {'hostname': os.uname()[1],
-                    'start_ts': time.time()}
-        metadata.update(extra_metadata)
-        return metadata
 
     @PipelineObject.with_pipeline
     def _record_worker_activity(self, worker_id, pipeline):

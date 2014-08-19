@@ -69,10 +69,9 @@ class WorkerMetadataRecorder(PipelineObject):
         return '{0}.{1}.metadata'.format(self.name, self.worker_id)
 
     @PipelineObject.with_pipeline
-    def record_initial_metadata(self, extra_metadata, pipeline):
+    def record_initial_metadata(self, pipeline):
         metadata = {'hostname': os.uname()[1],
                     'start_ts': time.time()}
-        metadata.update(extra_metadata)
         pipeline.hmset(self._key_name(), metadata)
         pipeline.expire(self._key_name(), METADATA_TIMEOUT)
 
@@ -99,6 +98,3 @@ class WorkerMetadataRecorder(PipelineObject):
         pipeline.hincrby(self._key_name(), 'expire', 1)
         pipeline.hset(self._key_name(), 'last_expire_ts', time.time())
         pipeline.expire(self._key_name(), METADATA_TIMEOUT)
-
-    def all_data(self):
-        return self.redis.hgetall(self._key_name())
