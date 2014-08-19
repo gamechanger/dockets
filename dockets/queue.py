@@ -49,7 +49,6 @@ class Queue(PipelineObject):
         self.worker_id = uuid.uuid1()
 
         self._wait_time = kwargs.get('wait_time') or 10
-        self._activity_timeout = kwargs.get('timeout', 60)
         self._serializer = kwargs.get('serializer', JsonSerializer())
         self._max_attempts = kwargs.get('max_attempts', 3)
         self._heartbeat_interval = kwargs.get('heartbeat_interval', 5)
