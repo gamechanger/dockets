@@ -67,9 +67,9 @@ class Docket(Queue):
 
 
     @PipelineObject.with_pipeline
-    def pop(self, worker_id, pipeline, current_time=None):
+    def pop(self, pipeline, current_time=None):
         next_envelope = None
-        self._record_worker_activity(worker_id)
+        self._record_worker_activity()
         with self.redis.pipeline() as pop_pipeline:
             while True:
                 try:
@@ -84,8 +84,6 @@ class Docket(Queue):
 
                     next_envelope_json = pop_pipeline.hget(self._payload_key(),
                                                            next_envelope_key)
-                    deserialization_failure = False
-
                     try:
                         next_envelope = self._serializer.deserialize(next_envelope_json)
                     except:
@@ -107,7 +105,7 @@ class Docket(Queue):
                     pop_pipeline.multi()
                     pop_pipeline.zrem(self._queue_key(), next_envelope_key)
                     pop_pipeline.hdel(self._payload_key(), next_envelope_key)
-                    pop_pipeline.lpush(self._working_queue_key(worker_id),
+                    pop_pipeline.lpush(self._working_queue_key(),
                                        next_envelope_json)
                     pop_pipeline.execute()
                     break
@@ -126,8 +124,8 @@ class Docket(Queue):
             return pipeline.execute()[0]
 
     @PipelineObject.with_pipeline
-    def complete(self, envelope, worker_id, pipeline):
-        super(Docket, self).complete(envelope, worker_id, pipeline=pipeline)
+    def complete(self, envelope, pipeline):
+        super(Docket, self).complete(envelope, pipeline=pipeline)
 
     def _reclaim_worker_queue(self, worker_id):
         working_contents = self.redis.lrange(self._working_queue_key(worker_id),
