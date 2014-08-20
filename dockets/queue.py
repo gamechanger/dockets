@@ -187,6 +187,7 @@ class Queue(PipelineObject):
         self._heartbeat()
 
         thread = Thread(target=run_heartbeat)
+        thread.daemon = True   # Make sure this doesn't keep the process hanging around if the main thread dies.
         thread.start()
         return thread
 
