@@ -1,6 +1,6 @@
 import os
 from multiprocessing import Process
-
+from time import sleep
 import simplejson
 from nose import with_setup
 from mock import Mock, patch
@@ -54,7 +54,7 @@ def clear_redis():
 def make_queue(cls):
     queue = cls(redis, 'test', use_error_queue=True,
                retry_error_classes=[TestRetryError],
-               max_attempts=5, wait_time=1)
+               max_attempts=5, wait_time=1, heartbeat_interval=0.01)
     queue.worker_id = 'test_worker'
     return queue
 
@@ -69,8 +69,6 @@ def register(fn):
 def run_once(queue):
     queue.register_worker()
     queue.run_once()
-    assert redis.exists('queue.test.test_worker.active')
-    assert redis.sismember('queue.test.workers', 'test_worker')
     assert_error_queue_empty(queue)
 
 @register
@@ -96,8 +94,6 @@ def push_once_pop_once(queue):
     assert queue.queued() == 0
     assert redis.llen('queue.test.test_worker.working') == 1
     assert_queue_entry(queue.redis.lindex('queue.test.test_worker.working', 0), {'a': 1})
-    assert redis.exists('queue.test.test_worker.active')
-    assert redis.sismember('queue.test.workers', 'test_worker')
     assert_error_queue_empty(queue)
 
 @register
@@ -118,12 +114,32 @@ def register_worker(queue):
     assert 'start_ts' in metadata
 
 @register
+def heartbeat_thread(queue):
+    stopping = False
+    thread = queue._start_heartbeat_thread(lambda: stopping)
+    sleep(0.05)
+    stopping = True
+    thread.join(0.02)
+    assert not thread.isAlive()
+
+@register
+def heartbeats(queue):
+    queue._heartbeat()
+    assert redis.exists('queue.test.test_worker.active')
+    assert redis.sismember('queue.test.workers', 'test_worker')
+    assert redis.ttl('queue.test.test_worker.active') == 1
+    sleep(0.9)
+    queue._heartbeat()
+    sleep(0.2)
+    assert redis.ttl('queue.test.test_worker.active') == 1
+
+
+@register
 def push_once_run_once(queue):
     queue.push({'a': 1})
     queue.register_worker()
     queue.run_once()
     assert queue.items_processed == [{'a': 1}]
-    assert redis.exists('queue.test.test_worker.active')
     assert queue.queued() == 0
     metadata = redis.hgetall('queue.test.test_worker.metadata')
     assert metadata
@@ -148,7 +164,6 @@ def push_twice_run_twice(queue):
     queue.run_once()
 
     assert queue.items_processed == [{'a': 1}, {'b': 2}]
-    assert redis.exists('queue.test.test_worker.active')
     assert queue.queued() == 0
     assert_error_queue_empty(queue)
     metadata = redis.hgetall('queue.test.test_worker.metadata')
@@ -334,6 +349,7 @@ def push_once_pop_once_reclaim(queue):
 
 @register
 def push_once_reclaim_once_unset_worker_key_reclaim(queue):
+    queue._heartbeat()
     queue.push({'a': 1})
     queue.pop()
     redis.delete(queue._worker_activity_key())
@@ -350,6 +366,7 @@ def run_bad_worker(queue):
 
 @register
 def push_once_run_bad_worker_unset_worker_key_reclaim(queue):
+    queue._heartbeat()
     p = Process(target=run_bad_worker, args=(queue,))
     p.start()
     p.join()
