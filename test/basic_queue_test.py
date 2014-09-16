@@ -3,10 +3,11 @@ from multiprocessing import Process
 from time import sleep
 import simplejson
 from nose import with_setup
+from nose.tools import raises
 from mock import Mock, patch
 
 from util import *
-from dockets.queue import Queue
+from dockets.queue import Queue, HeartbeatThreadException
 from dockets.isolation_queue import IsolationQueue
 from dockets.docket import Docket
 from dockets.errors import ExpiredError
@@ -414,6 +415,14 @@ def deserialization_error(queue):
     assert queue.queued() == 0
     assert redis.llen('queue.test.test_worker.working') == 0
     assert_error_queue_empty(queue)
+
+@register
+@raises(HeartbeatThreadException)
+def run_should_raise_if_heartbeat_thread_dies(queue):
+    fake_thread = Mock()
+    fake_thread.is_alive = Mock(return_value=False)
+    queue._start_heartbeat_thread = Mock(return_value=fake_thread)
+    queue.run()
 
 def test_all_queues():
     for cls in (TestQueue, TestIsolationQueue, TestDocket):
