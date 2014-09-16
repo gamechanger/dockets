@@ -18,6 +18,9 @@ from dockets.error_queue import ErrorQueue, DummyErrorQueue
 
 logger = logging.getLogger(__name__)
 
+class HeartbeatThreadException(Exception):
+    pass
+
 class Queue(PipelineObject):
     """
     Basic queue that does no entry tracking
@@ -200,6 +203,9 @@ class Queue(PipelineObject):
         heartbeat_thread = self._start_heartbeat_thread(lambda: stopping)
 
         while True:
+            if not heartbeat_thread.is_alive():
+                raise HeartbeatThreadException('heartbeat thread is dead')
+
             if not should_continue():
                 stopping = True
 
@@ -372,5 +378,3 @@ PUSH = Queue.PUSH
 # Operation errors
 SERIALIZATION = Queue.SERIALIZATION
 DESERIALIZATION = Queue.DESERIALIZATION
-
-
