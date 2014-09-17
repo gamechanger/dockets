@@ -169,7 +169,8 @@ class Queue(PipelineObject):
         """
         pipeline.sadd(self._workers_set_key(), self.worker_id)
         pipeline.setex(self._worker_activity_key(), 1,
-                       int(math.ceil(self._heartbeat_interval * 5)))
+                       int(math.ceil(self._heartbeat_interval * 50)))
+        logging.debug('DOCKETS: heartbeat')
 
 
     def _start_heartbeat_thread(self, should_stop):
