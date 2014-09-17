@@ -7,7 +7,7 @@ def read(fname):
 
 setuptools.setup(
     name="Dockets",
-    version="0.2.1",
+    version="0.2.2",
     author="Doug Woos",
     author_email="doug@gamechanger.io",
     description="SUPER simple Redis-backed queueing in Python",
