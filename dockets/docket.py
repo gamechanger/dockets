@@ -16,12 +16,13 @@ class Docket(Queue):
         return '{0}.payload'.format(self._queue_key())
 
     def push(self, item, pipeline=None, when=None, envelope=None,
-             max_attempts=None, attempts=0, error_classes=None):
+             max_attempts=None, attempts=None, error_classes=None):
         passed_pipeline = True
         if not pipeline:
             passed_pipeline = False
             pipeline = self.redis.pipeline()
         when = when or (envelope and envelope['when']) or time.time()
+        attempts = attempts or (envelope and envelope['attempts']) or 0
         timestamp = self._get_timestamp(when)
         envelope = {'when': timestamp,
                     'ts': time.time(),
@@ -125,6 +126,7 @@ class Docket(Queue):
                                              0, sys.maxint)
         for envelope_json in working_contents:
             envelope = self._serializer.deserialize(envelope_json)
+            envelope['attempts'] += 1
             self.push(envelope['item'], envelope=envelope)
         self.redis.delete(self._working_queue_key(worker_id))
 
