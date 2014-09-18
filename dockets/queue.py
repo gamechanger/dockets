@@ -5,7 +5,7 @@ import time
 import pickle
 import collections
 import math
-
+from redis import WatchError
 from threading import Thread
 from time import sleep
 from dockets import errors, _global_event_handler_classes, _global_retry_error_classes
@@ -360,9 +360,30 @@ class Queue(PipelineObject):
                 self.redis.srem(self._workers_set_key(), worker_id)
 
     def _reclaim_worker_queue(self, worker_id):
-        while self.redis.rpoplpush(self._working_queue_key(worker_id),
-                                   self._queue_key()):
-            continue
+        while True:
+            with self.redis.pipeline() as pipeline:
+                try:
+                    pipeline.watch(self._working_queue_key(worker_id))
+                    serialized_envelopes = pipeline.lrange(self._working_queue_key(worker_id), -1, -1)
+                    try:
+                        pipeline.multi()
+                        pipeline.rpop(self._working_queue_key(worker_id))
+                        if not serialized_envelopes:
+                            # We're out of things to reclaim!
+                            return
+
+                        envelope = self._serializer.deserialize(serialized_envelopes[0])
+                        envelope['attempts'] += 1
+                        pipeline.lpush(self._queue_key(), self._serializer.serialize(envelope))
+                    except Exception:
+                        # Couldn't deserialize, this is pretty bad. Report it.
+                        self._event_registrar.on_operation_error(exc_info=sys.exc_info(),
+                                                                 pipeline=pipeline)
+                    finally:
+                        pipeline.execute()
+                except WatchError:
+                    continue
+
 
 # For backwards compatibility, put constants at module-level as well.
 FIFO = Queue.FIFO

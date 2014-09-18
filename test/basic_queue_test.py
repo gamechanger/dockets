@@ -356,7 +356,7 @@ def push_once_reclaim_once_unset_worker_key_reclaim(queue):
     redis.delete(queue._worker_activity_key())
     queue._reclaim()
     assert queue.queued() == 1
-    assert_queue_entry(queue.queued_items()[0], {'a': 1})
+    assert_queue_entry(queue.queued_items()[0], {'a': 1}, attempts=1)
 
 def run_bad_worker(queue):
     queue.push({'a': 1})
