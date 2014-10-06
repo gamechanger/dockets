@@ -242,7 +242,7 @@ class Queue(PipelineObject):
 
         item = envelope['item']
         pop_time = time.time()
-        response_time = pop_time - float(envelope['first_ts'])
+        response_time = pop_time - float(envelope['ts'])
         item_error_classes = self.error_classes_for_envelope(envelope)
         self._event_registrar.on_pop(item=item, item_key=self.item_key(item),
                                      response_time=response_time,
@@ -301,7 +301,7 @@ class Queue(PipelineObject):
         finally:
             self.complete(envelope, pipeline=pipeline)
             complete_time = time.time()
-            turnaround_time = complete_time - float(envelope['first_ts'])
+            turnaround_time = complete_time - float(envelope['ts'])
             processing_time = complete_time - pop_time
             self._event_registrar.on_complete(item=item, item_key=self.item_key(item),
                                               turnaround_time=turnaround_time,
