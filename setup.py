@@ -1,4 +1,5 @@
 import os
+import dockets
 import setuptools
 
 def read(fname):
@@ -7,7 +8,7 @@ def read(fname):
 
 setuptools.setup(
     name="Dockets",
-    version="0.2.3",
+    version=dockets.__version__,
     author="Doug Woos",
     author_email="doug@gamechanger.io",
     description="SUPER simple Redis-backed queueing in Python",
