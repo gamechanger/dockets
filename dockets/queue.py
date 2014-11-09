@@ -180,11 +180,19 @@ class Queue(PipelineObject):
         reclaimed.
         """
         def run_heartbeat():
+            reclaim_heartbeats = 0
             while True:
                 sleep(self._heartbeat_interval)
                 if should_stop():
                     break
                 self._heartbeat()
+
+                # Run a reclaim every 50 heartbeats to clean up any items
+                # left by crashed workers
+                if reclaim_heartbeats <= 0:
+                    reclaim_heartbeats = 50
+                    self._reclaim()
+                reclaim_heartbeats -= 1
 
         # Do an initial heartbeat to avoid any race conditions. Subsequent
         # heartbeats will happen in the background thread.
@@ -218,8 +226,6 @@ class Queue(PipelineObject):
 
 
     def register_worker(self):
-        self._reclaim()
-
         worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
                                                  self.worker_id)
         worker_recorder.record_initial_metadata()
