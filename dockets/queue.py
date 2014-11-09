@@ -180,11 +180,19 @@ class Queue(PipelineObject):
         reclaimed.
         """
         def run_heartbeat():
+            reclaim_heartbeats = 0
             while True:
                 sleep(self._heartbeat_interval)
                 if should_stop():
                     break
                 self._heartbeat()
+
+                # Run a reclaim every 50 heartbeats to clean up any items
+                # left by crashed workers
+                if reclaim_heartbeats <= 0:
+                    reclaim_heartbeats = 50
+                    self._reclaim()
+                reclaim_heartbeats -= 1
 
         # Do an initial heartbeat to avoid any race conditions. Subsequent
         # heartbeats will happen in the background thread.
@@ -218,8 +226,6 @@ class Queue(PipelineObject):
 
 
     def register_worker(self):
-        self._reclaim()
-
         worker_recorder = WorkerMetadataRecorder(self.redis, self._queue_key(),
                                                  self.worker_id)
         worker_recorder.record_initial_metadata()
@@ -374,7 +380,11 @@ class Queue(PipelineObject):
 
                         envelope = self._serializer.deserialize(serialized_envelopes[0])
                         envelope['attempts'] += 1
+                        envelope['ts'] = time.time()
                         pipeline.lpush(self._queue_key(), self._serializer.serialize(envelope))
+                        self._event_registrar.on_reclaim(item=envelope['item'],
+                                                         item_key=self.item_key(envelope['item']),
+                                                         pipeline=pipeline)
                     except Exception:
                         # Couldn't deserialize, this is pretty bad. Report it.
                         self._event_registrar.on_operation_error(exc_info=sys.exc_info(),
