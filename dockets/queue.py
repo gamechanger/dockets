@@ -375,6 +375,9 @@ class Queue(PipelineObject):
                         envelope = self._serializer.deserialize(serialized_envelopes[0])
                         envelope['attempts'] += 1
                         pipeline.lpush(self._queue_key(), self._serializer.serialize(envelope))
+                        self._event_registrar.on_reclaim(item=envelope['item'],
+                                                         item_key=self.item_key(envelope['item']),
+                                                         pipeline=pipeline)
                     except Exception:
                         # Couldn't deserialize, this is pretty bad. Report it.
                         self._event_registrar.on_operation_error(exc_info=sys.exc_info(),
