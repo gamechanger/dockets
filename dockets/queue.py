@@ -374,6 +374,7 @@ class Queue(PipelineObject):
 
                         envelope = self._serializer.deserialize(serialized_envelopes[0])
                         envelope['attempts'] += 1
+                        envelope['ts'] = time.time()
                         pipeline.lpush(self._queue_key(), self._serializer.serialize(envelope))
                         self._event_registrar.on_reclaim(item=envelope['item'],
                                                          item_key=self.item_key(envelope['item']),
