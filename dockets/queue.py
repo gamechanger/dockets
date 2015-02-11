@@ -222,7 +222,12 @@ class Queue(PipelineObject):
                 heartbeat_thread.join(self._heartbeat_interval * 2)
                 break
 
-            self.run_once()
+            try:
+                self.run_once()
+            except Exception as e:
+                logging.exception(e)
+                self.redis.Connection.disconnect()
+                self.redis.Connection.connect()
 
 
     def register_worker(self):
