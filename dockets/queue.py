@@ -99,24 +99,22 @@ class Queue(PipelineObject):
         # Move any due delayed items to the main working list
         try:
             pipeline.watch(self._delayed_queue_key())
-            try:
-                next_envelope_key, timestamp = pipeline.zrange(
-                    self._delayed_queue_key(), 0, 1, withscores=True)[0]
-                if time.time() < timestamp:
-                    # It's not yet that time.
-                    return
-                envelope = pipeline.hget(self._payload_key(), next_envelope_key)
-                pipeline.multi()
-                if self.mode == self.FIFO:
-                    pipeline.lpush(self._queue_key(), envelope)
-                else:
-                    pipeline.rpush(self._queue_key(), envelope)
-                pipeline.zrem(self._delayed_queue_key(), next_envelope_key)
-                pipeline.hdel(self._payload_key(), next_envelope_key)
-                pipeline.execute()
-
-            except IndexError:
-                pass # Empty set - move on with our lives
+            head = pipeline.zrange(self._delayed_queue_key(), 0, 1, withscores=True)
+            if not head:
+                return
+            next_envelope_key, timestamp = head[0]
+            if time.time() < timestamp:
+                # It's not yet that time.
+                return
+            envelope = pipeline.hget(self._payload_key(), next_envelope_key)
+            pipeline.multi()
+            if self.mode == self.FIFO:
+                pipeline.lpush(self._queue_key(), envelope)
+            else:
+                pipeline.rpush(self._queue_key(), envelope)
+            pipeline.zrem(self._delayed_queue_key(), next_envelope_key)
+            pipeline.hdel(self._payload_key(), next_envelope_key)
+            pipeline.execute()
         except WatchError:
             pass
 
