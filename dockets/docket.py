@@ -12,8 +12,6 @@ from dockets.queue import Queue
 
 
 class Docket(Queue):
-    def _payload_key(self):
-        return '{0}.payload'.format(self._queue_key())
 
     def push(self, item, pipeline=None, when=None, envelope=None,
              max_attempts=None, attempts=None, error_classes=None):

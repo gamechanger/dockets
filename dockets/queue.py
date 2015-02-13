@@ -93,11 +93,36 @@ class Queue(PipelineObject):
                             for key_component in self.key)
         return str(item)
 
+    def move_delayed_item(self):
+        pipeline = self.redis.pipeline()
+
+        # Move any due delayed items to the main working list
+        try:
+            pipeline.watch(self._delayed_queue_key())
+            head = pipeline.zrange(self._delayed_queue_key(), 0, 1, withscores=True)
+            if not head:
+                return
+            next_envelope_key, timestamp = head[0]
+            if time.time() < timestamp:
+                # It's not yet that time.
+                return
+            envelope = pipeline.hget(self._payload_key(), next_envelope_key)
+            pipeline.multi()
+            if self.mode == self.FIFO:
+                pipeline.lpush(self._queue_key(), envelope)
+            else:
+                pipeline.rpush(self._queue_key(), envelope)
+            pipeline.zrem(self._delayed_queue_key(), next_envelope_key)
+            pipeline.hdel(self._payload_key(), next_envelope_key)
+            pipeline.execute()
+        except WatchError:
+            pass
 
     ## public methods
 
     @PipelineObject.with_pipeline
     def pop(self, pipeline):
+        self.move_delayed_item()
         pop_pipeline = self.redis.pipeline()
         args = [self._queue_key(), self._working_queue_key(), self._wait_time]
         pop_pipeline.execute()
@@ -116,7 +141,7 @@ class Queue(PipelineObject):
 
     @PipelineObject.with_pipeline
     def push(self, item, pipeline, first_ts=None, ttl=None, envelope=None,
-             max_attempts=None, attempts=0, error_classes=None):
+             max_attempts=None, attempts=0, error_classes=None, delay=None):
         envelope = {'first_ts': first_ts or (envelope and envelope['first_ts'])
                     or time.time(),
                     'ts': time.time(),
@@ -127,10 +152,18 @@ class Queue(PipelineObject):
                     'max_attempts': max_attempts or self._max_attempts,
                     'error_classes': pickle.dumps(error_classes)}
         serialized_envelope = self._serializer.serialize(envelope)
-        if self.mode == self.FIFO:
-            pipeline.lpush(self._queue_key(), serialized_envelope)
+
+        if delay is not None:
+            timestamp = time.time() + delay
+            key = self.item_key(item)
+            pipeline.hset(self._payload_key(), key, serialized_envelope)
+            pipeline.zadd(self._delayed_queue_key(), key, timestamp)
         else:
-            pipeline.rpush(self._queue_key(), serialized_envelope)
+            if self.mode == self.FIFO:
+                pipeline.lpush(self._queue_key(), serialized_envelope)
+            else:
+                pipeline.rpush(self._queue_key(), serialized_envelope)
+
         self._event_registrar.on_push(
             item=item,
             item_key=self.item_key(item),
@@ -345,6 +378,12 @@ class Queue(PipelineObject):
 
     def _queue_key(self):
         return 'queue.{0}'.format(self.name)
+
+    def _payload_key(self):
+        return '{0}.payload'.format(self._queue_key())
+
+    def _delayed_queue_key(self):
+        return 'queue.{0}.delayed'.format(self.name)
 
     def _workers_set_key(self):
         return 'queue.{0}.workers'.format(self.name)
