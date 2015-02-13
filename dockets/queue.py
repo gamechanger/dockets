@@ -101,7 +101,7 @@ class Queue(PipelineObject):
             pipeline.watch(self._delayed_queue_key())
             try:
                 next_envelope_key, timestamp = pipeline.zrange(
-                    self._delayed_queue_key(), 0, 3, withscores=True)[0]
+                    self._delayed_queue_key(), 0, 1, withscores=True)[0]
                 if time.time() < timestamp:
                     # It's not yet that time.
                     return
