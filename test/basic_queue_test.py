@@ -424,6 +424,37 @@ def run_should_raise_if_heartbeat_thread_dies(queue):
     queue._start_heartbeat_thread = Mock(return_value=fake_thread)
     queue.run()
 
+@with_setup(clear_redis)
+def test_delayed_item_should_not_be_immediately_available():
+    queue = make_queue(TestQueue)
+    queue.push({'a': 1}, delay=1)
+    item = queue.pop()
+    assert item is None
+
+@with_setup(clear_redis)
+def test_delayed_item_executed_after_delay():
+    queue = make_queue(TestQueue)
+    queue.push({'a': 1}, delay=1)
+    sleep(1)
+    item = queue.pop()
+    assert item['item'] == {'a': 1}
+
+@with_setup(clear_redis)
+def test_multiple_delayed_items():
+    queue = make_queue(TestQueue)
+    queue.push({'a': 1}, delay=1)
+    queue.push({'a': 2}, delay=0.1)
+    queue.push({'a': 3}, delay=0.5)
+    sleep(0.1)
+    item = queue.pop()
+    assert item['item'] == {'a': 2}
+    sleep(0.4)
+    item = queue.pop()
+    assert item['item'] == {'a': 3}
+    sleep(0.5)
+    item = queue.pop()
+    assert item['item'] == {'a': 1}
+
 def test_all_queues():
     for cls in (TestQueue, TestIsolationQueue, TestDocket):
         for test_case in all_queue_tests:
