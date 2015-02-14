@@ -95,18 +95,21 @@ class Queue(PipelineObject):
                             for key_component in self.key)
         return str(item)
 
-    def move_delayed_items(self):
-        self._move_delayed_items(keys=[self._delayed_queue_key(),
-                                       self._payload_key(),
-                                       self._queue_key()],
-                                 args=[time.time(),
-                                       self.mode == self.FIFO])
+    def pop_delayed_items(self, pipeline):
+        num_popped = self._move_delayed_items(
+            keys=[self._delayed_queue_key(),
+                  self._payload_key(),
+                  self._queue_key()],
+            args=[time.time(), self.mode == self.FIFO])
+        self._event_registrar.on_delay_pop(
+            num_popped=num_popped, pipeline=pipeline)
+
 
     ## public methods
 
     @PipelineObject.with_pipeline
     def pop(self, pipeline):
-        self.move_delayed_items()
+        self.pop_delayed_items(pipeline)
         pop_pipeline = self.redis.pipeline()
         args = [self._queue_key(), self._working_queue_key(), self._wait_time]
         pop_pipeline.execute()
@@ -152,7 +155,8 @@ class Queue(PipelineObject):
             item=item,
             item_key=self.item_key(item),
             pipeline=pipeline,
-            pretty_printed_item=self.pretty_printer(item))
+            pretty_printed_item=self.pretty_printer(item),
+            delay=delay)
 
 
     @PipelineObject.with_pipeline
