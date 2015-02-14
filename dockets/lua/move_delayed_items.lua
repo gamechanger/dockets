@@ -19,8 +19,8 @@ for index, moveKey in ipairs(toMove) do
    else
       redis.call('rpush', queueKey, movePayload)
    end
+   redis.call('zrem', delayedQueueKey, moveKey)
    redis.call('hdel', payloadKey, moveKey)
 end
 
-redis.call('zremrangebyscore', delayedQueueKey, 0, currentTime)
 return true
