@@ -8,9 +8,6 @@ local currentTime = ARGV[1]
 local FIFO = ARGV[2]
 
 local toMove = redis.call('zrangebyscore', delayedQueueKey, 0, currentTime, 'limit', 0, 50)
-if #toMove == 0 then
-   return false
-end
 
 for index, moveKey in ipairs(toMove) do
    local movePayload = redis.call('hget', payloadKey, moveKey)
@@ -22,5 +19,3 @@ for index, moveKey in ipairs(toMove) do
    redis.call('zrem', delayedQueueKey, moveKey)
    redis.call('hdel', payloadKey, moveKey)
 end
-
-return true
