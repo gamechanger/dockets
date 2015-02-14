@@ -19,3 +19,5 @@ for index, moveKey in ipairs(toMove) do
    redis.call('zrem', delayedQueueKey, moveKey)
    redis.call('hdel', payloadKey, moveKey)
 end
+
+return #toMove

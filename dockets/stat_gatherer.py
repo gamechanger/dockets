@@ -81,11 +81,18 @@ class StatGatherer(object):
     def on_push(self, pipeline, **kwargs):
         self._update_timestamp('last_push', pipeline)
 
+    def on_delay_pop(self, pipeline, **kwargs):
+        self._update_timestamp('last_delay_pop', pipeline)
+
+
 
     # ACCESSOR METHODS FOR STATS
 
     def last_pop(self):
         return self._get_timestamp('last_pop')
+
+    def last_delay_pop(self):
+        return self._get_timestamp('last_delay_pop')
 
     def last_complete(self):
         return self._get_timestamp('last_complete')

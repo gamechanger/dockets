@@ -17,6 +17,7 @@ class QueueEventRegistrar(object):
         self.create_proxy_method('on_operation_error')
         self.create_proxy_method('on_remove')
         self.create_proxy_method('on_empty')
+        self.create_proxy_method('on_delay_pop')
 
     def register(self, handler):
         """Registers a handler to receive events."""
