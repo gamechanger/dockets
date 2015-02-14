@@ -7,7 +7,7 @@ local queueKey = KEYS[3]
 local currentTime = ARGV[1]
 local FIFO = ARGV[2]
 
-local toMove = redis.call('zrangebyscore', delayedQueueKey, 0, currentTime)
+local toMove = redis.call('zrangebyscore', delayedQueueKey, 0, currentTime, 'limit', 0, 50)
 if #toMove == 0 then
    return false
 end
