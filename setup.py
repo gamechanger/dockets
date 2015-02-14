@@ -16,6 +16,7 @@ setuptools.setup(
     keywords="redis queue schedule",
     url="http://github.com/gamechanger/dockets",
     packages=["dockets"],
+    package_data={"dockets": ["lua/*.lua"]},
     long_description="LONG",
     install_requires=['simplejson','redis>=2.10','python-dateutil'],
     test_suite = 'nose.collector',

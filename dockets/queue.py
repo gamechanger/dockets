@@ -8,6 +8,7 @@ import math
 from redis import WatchError
 from threading import Thread
 from time import sleep
+from pkg_resources import resource_string
 from dockets import errors, _global_event_handler_classes, _global_retry_error_classes
 from dockets.pipeline import PipelineObject
 from dockets.metadata import WorkerMetadataRecorder
@@ -69,7 +70,8 @@ class Queue(PipelineObject):
 
         self.error_queue = ErrorQueue(self) if use_error_queue else DummyErrorQueue(self)
 
-
+        move_delayed_items_source = resource_string(__name__, 'lua/move_delayed_items.lua')
+        self._move_delayed_items = self.redis.register_script(move_delayed_items_source)
 
     @property
     def stats(self):
@@ -93,36 +95,18 @@ class Queue(PipelineObject):
                             for key_component in self.key)
         return str(item)
 
-    def move_delayed_item(self):
-        pipeline = self.redis.pipeline()
-
-        # Move any due delayed items to the main working list
-        try:
-            pipeline.watch(self._delayed_queue_key())
-            head = pipeline.zrange(self._delayed_queue_key(), 0, 1, withscores=True)
-            if not head:
-                return
-            next_envelope_key, timestamp = head[0]
-            if time.time() < timestamp:
-                # It's not yet that time.
-                return
-            envelope = pipeline.hget(self._payload_key(), next_envelope_key)
-            pipeline.multi()
-            if self.mode == self.FIFO:
-                pipeline.lpush(self._queue_key(), envelope)
-            else:
-                pipeline.rpush(self._queue_key(), envelope)
-            pipeline.zrem(self._delayed_queue_key(), next_envelope_key)
-            pipeline.hdel(self._payload_key(), next_envelope_key)
-            pipeline.execute()
-        except WatchError:
-            pass
+    def move_delayed_items(self):
+        self._move_delayed_items(keys=[self._delayed_queue_key(),
+                                       self._payload_key(),
+                                       self._queue_key()],
+                                 args=[time.time(),
+                                       self.mode == self.FIFO])
 
     ## public methods
 
     @PipelineObject.with_pipeline
     def pop(self, pipeline):
-        self.move_delayed_item()
+        self.move_delayed_items()
         pop_pipeline = self.redis.pipeline()
         args = [self._queue_key(), self._working_queue_key(), self._wait_time]
         pop_pipeline.execute()
