@@ -139,7 +139,7 @@ class Queue(PipelineObject):
 
         if delay is not None:
             timestamp = time.time() + delay
-            key = self.item_key(item)
+            key = uuid.uuid1()
             pipeline.hset(self._payload_key(), key, serialized_envelope)
             pipeline.zadd(self._delayed_queue_key(), key, timestamp)
         else:
