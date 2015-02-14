@@ -101,7 +101,6 @@ class Queue(PipelineObject):
                   self._payload_key(),
                   self._queue_key()],
             args=[time.time(), self.mode == self.FIFO])
-        print num_popped
         self._event_registrar.on_delay_pop(
             num_popped=num_popped, pipeline=pipeline)
 
