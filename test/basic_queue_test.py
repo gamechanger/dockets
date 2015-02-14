@@ -455,6 +455,20 @@ def test_multiple_delayed_items():
     item = queue.pop()
     assert item['item'] == {'a': 1}
 
+@with_setup(clear_redis)
+def test_multiple_delayed_items_same_data():
+    queue = make_queue(TestQueue)
+    queue.push({'a': 1}, delay=0.05)
+    queue.push({'a': 1}, delay=0.1)
+    queue.push({'a': 1}, delay=0.15)
+    sleep(0.2)
+    item = queue.pop()
+    assert item is not None
+    item = queue.pop()
+    assert item is not None
+    item = queue.pop()
+    assert item is not None
+
 def test_all_queues():
     for cls in (TestQueue, TestIsolationQueue, TestDocket):
         for test_case in all_queue_tests:
