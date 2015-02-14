@@ -456,6 +456,14 @@ def test_multiple_delayed_items():
     assert item['item'] == {'a': 1}
 
 @with_setup(clear_redis)
+def test_delayed_item_count():
+    queue = make_queue(TestQueue)
+    queue.push({'a': 1}, delay=1)
+    queue.push({'a': 2}, delay=0.1)
+    queue.push({'a': 3}, delay=0.5)
+    assert 3 == queue.delayed()
+
+@with_setup(clear_redis)
 def test_multiple_delayed_items_same_data():
     queue = make_queue(TestQueue)
     queue.push({'a': 1}, delay=0.05)
