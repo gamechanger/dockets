@@ -362,6 +362,9 @@ class Queue(PipelineObject):
     def queued_items(self):
         return self.redis.lrange(self._queue_key(), 0, sys.maxint)
 
+    def delayed(self):
+        return self.redis.zcard(self._delayed_queue_key())
+
     ## names of keys in redis
 
     def _queue_key(self):
