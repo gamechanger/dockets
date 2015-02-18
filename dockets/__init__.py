@@ -18,8 +18,6 @@ def add_global_event_handler(handler_class):
 def clear_global_event_handlers():
     _global_event_handler_classes.clear()
 
-add_global_event_handler(LoggingEventHandler)
-
 
 _global_retry_error_classes = set()
 
