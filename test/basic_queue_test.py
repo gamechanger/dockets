@@ -54,8 +54,8 @@ def clear_redis():
 
 def make_queue(cls):
     queue = cls(redis, 'test', use_error_queue=True,
-               retry_error_classes=[TestRetryError],
-               max_attempts=5, wait_time=1, heartbeat_interval=0.01)
+                retry_error_classes=[TestRetryError],
+                max_attempts=5, wait_time=1, heartbeat_interval=0.01)
     queue.worker_id = 'test_worker'
     return queue
 

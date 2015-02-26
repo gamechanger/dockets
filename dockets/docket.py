@@ -71,7 +71,8 @@ class Docket(Queue):
                     except IndexError:
                         # Simulate a blocking ZRANGE by sleeping if there is nothing returned.
                         # This ensures we aren't hammering Redis.
-                        sleep(self._wait_time)
+                        if self._wait_time >= 0:
+                            sleep(self._wait_time)
                         return
 
                     next_envelope_json = pop_pipeline.hget(self._payload_key(),
@@ -91,7 +92,8 @@ class Docket(Queue):
                     if next_envelope['when'] > (current_time or time.time()):
                         # Simulate a blocking call by sleeping if there is nothing returned.
                         # This ensures we aren't hammering Redis.
-                        sleep(self._wait_time)
+                        if self._wait_time >= 0:
+                            sleep(self._wait_time)
                         return None
 
                     pop_pipeline.multi()
@@ -147,5 +149,3 @@ class Docket(Queue):
                 return float(when)
         except:
             raise TypeError('Invalid time specification', when)
-
-
