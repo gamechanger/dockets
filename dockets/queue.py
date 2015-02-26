@@ -113,7 +113,7 @@ class Queue(PipelineObject):
         pop_pipeline = self.redis.pipeline()
         pop_pipeline.execute()
 
-        args = [self._queue_key(), self._working_queue_key(), self._wait_time]
+        args = [self._queue_key(), self._working_queue_key()]
         if isinstance(self._wait_time, int) and self._wait_time >= 10:
             op = self.redis.brpoplpush
             args.append(self._wait_time)
