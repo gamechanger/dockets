@@ -3,6 +3,7 @@ import sys
 import time
 from uuid import uuid1
 from traceback import format_exc
+import logging
 
 from dockets.pipeline import PipelineObject
 
@@ -57,7 +58,11 @@ class ErrorQueue(PipelineObject):
             self.requeue_error(error_id)
 
     def delete_error(self, error_id):
-        self.queue.delete(self.error(error_id)['envelope'])
+        error = self.error(error_id)
+        try:
+            self.queue.delete(error['envelope'])
+        except KeyError:
+            logging.warn('Error has no envelope, skipping delete callback: {}'.format(error))
         return self.redis.hdel(self._hash_key(), error_id)
 
     def errors(self):
