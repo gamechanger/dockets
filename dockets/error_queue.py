@@ -59,10 +59,8 @@ class ErrorQueue(PipelineObject):
 
     def delete_error(self, error_id):
         error = self.error(error_id)
-        try:
+        if 'envelope' in error:
             self.queue.delete(error['envelope'])
-        except KeyError:
-            logging.warn('Error has no envelope, skipping delete callback: {}'.format(error))
         return self.redis.hdel(self._hash_key(), error_id)
 
     def errors(self):
