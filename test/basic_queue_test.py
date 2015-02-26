@@ -52,12 +52,13 @@ class TestDocket(Docket):
 def clear_redis():
     redis.flushdb()
 
-def make_queue(cls):
-    queue = cls(redis, 'test', use_error_queue=True,
-               retry_error_classes=[TestRetryError],
-               max_attempts=5, wait_time=1, heartbeat_interval=0.01)
-    queue.worker_id = 'test_worker'
-    return queue
+def make_queues(cls):
+    for wait_time in [-1, 1]:
+        queue = cls(redis, 'test', use_error_queue=True,
+                    retry_error_classes=[TestRetryError],
+                    max_attempts=5, wait_time=wait_time, heartbeat_interval=0.01)
+        queue.worker_id = 'test_worker'
+        yield queue
 
 all_queue_tests = []
 
@@ -426,58 +427,60 @@ def run_should_raise_if_heartbeat_thread_dies(queue):
 
 @with_setup(clear_redis)
 def test_delayed_item_should_not_be_immediately_available():
-    queue = make_queue(TestQueue)
-    queue.push({'a': 1}, delay=1)
-    item = queue.pop()
-    assert item is None
+    for queue in make_queues(TestQueue):
+        queue.push({'a': 1}, delay=1)
+        item = queue.pop()
+        assert item is None
 
 @with_setup(clear_redis)
 def test_delayed_item_executed_after_delay():
-    queue = make_queue(TestQueue)
-    queue.push({'a': 1}, delay=1)
-    sleep(1)
-    item = queue.pop()
-    assert item['item'] == {'a': 1}
+    for queue in make_queues(TestQueue):
+        queue.push({'a': 1}, delay=1)
+        sleep(1)
+        item = queue.pop()
+        assert item['item'] == {'a': 1}
 
 @with_setup(clear_redis)
 def test_multiple_delayed_items():
-    queue = make_queue(TestQueue)
-    queue.push({'a': 1}, delay=1)
-    queue.push({'a': 2}, delay=0.1)
-    queue.push({'a': 3}, delay=0.5)
-    sleep(0.1)
-    item = queue.pop()
-    assert item['item'] == {'a': 2}
-    sleep(0.4)
-    item = queue.pop()
-    assert item['item'] == {'a': 3}
-    sleep(0.5)
-    item = queue.pop()
-    assert item['item'] == {'a': 1}
+    for queue in make_queues(TestQueue):
+        queue.push({'a': 1}, delay=1)
+        queue.push({'a': 2}, delay=0.1)
+        queue.push({'a': 3}, delay=0.5)
+        sleep(0.1)
+        item = queue.pop()
+        assert item['item'] == {'a': 2}
+        sleep(0.4)
+        item = queue.pop()
+        assert item['item'] == {'a': 3}
+        sleep(0.5)
+        item = queue.pop()
+        assert item['item'] == {'a': 1}
 
 @with_setup(clear_redis)
 def test_delayed_item_count():
-    queue = make_queue(TestQueue)
-    queue.push({'a': 1}, delay=1)
-    queue.push({'a': 2}, delay=0.1)
-    queue.push({'a': 3}, delay=0.5)
-    assert 3 == queue.delayed()
+    for queue in make_queues(TestQueue):
+        queue.push({'a': 1}, delay=1)
+        queue.push({'a': 2}, delay=0.1)
+        queue.push({'a': 3}, delay=0.5)
+        assert 3 == queue.delayed()
+        queue.redis.delete(queue._delayed_queue_key())
 
 @with_setup(clear_redis)
 def test_multiple_delayed_items_same_data():
-    queue = make_queue(TestQueue)
-    queue.push({'a': 1}, delay=0.05)
-    queue.push({'a': 1}, delay=0.1)
-    queue.push({'a': 1}, delay=0.15)
-    sleep(0.2)
-    item = queue.pop()
-    assert item is not None
-    item = queue.pop()
-    assert item is not None
-    item = queue.pop()
-    assert item is not None
+    for queue in make_queues(TestQueue):
+        queue.push({'a': 1}, delay=0.05)
+        queue.push({'a': 1}, delay=0.1)
+        queue.push({'a': 1}, delay=0.15)
+        sleep(0.2)
+        item = queue.pop()
+        assert item is not None
+        item = queue.pop()
+        assert item is not None
+        item = queue.pop()
+        assert item is not None
 
 def test_all_queues():
     for cls in (TestQueue, TestIsolationQueue, TestDocket):
         for test_case in all_queue_tests:
-            yield test_case, make_queue(cls)
+            for queue in make_queues(cls):
+                yield test_case, queue

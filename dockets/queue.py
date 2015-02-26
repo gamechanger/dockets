@@ -111,9 +111,16 @@ class Queue(PipelineObject):
     def pop(self, pipeline):
         self.pop_delayed_items(pipeline)
         pop_pipeline = self.redis.pipeline()
-        args = [self._queue_key(), self._working_queue_key(), self._wait_time]
         pop_pipeline.execute()
-        serialized_envelope = self.redis.brpoplpush(*args)
+
+        args = [self._queue_key(), self._working_queue_key()]
+        if isinstance(self._wait_time, int) and self._wait_time >= 0:
+            op = self.redis.brpoplpush
+            args.append(self._wait_time)
+        else:
+            op = self.redis.rpoplpush
+
+        serialized_envelope = op(*args)
         if not serialized_envelope:
             return None
         try:
