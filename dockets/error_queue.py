@@ -20,6 +20,10 @@ class ErrorQueue(PipelineObject):
         super(ErrorQueue, self).__init__(main_queue.redis)
 
     @PipelineObject.with_pipeline
+    def push_error(self, error_id, error_item, pipeline):
+        pipeline.hset(self._hash_key(), error_id, self._serializer.serialize(error_item))
+
+    @PipelineObject.with_pipeline
     def queue_error(self, envelope, pipeline):
         """
         Record an error in processing the current item. This accesses
@@ -37,9 +41,7 @@ class ErrorQueue(PipelineObject):
                       'ts': time.time(),
                       'id': error_id}
 
-        pipeline.hset(self._hash_key(),
-                      error_id,
-                      self._serializer.serialize(error_item))
+        self.push_error(error_id, error_item, pipeline=pipeline)
 
     def requeue_error(self, error_id):
         error = self._serializer.deserialize(self.redis.hget(self._hash_key(), error_id))
