@@ -4,7 +4,7 @@ from datetime import datetime
 import pickle
 
 import dateutil.parser
-from redis import WatchError
+from redis import WatchError, Redis
 from time import sleep
 
 from dockets.pipeline import PipelineObject
@@ -34,7 +34,12 @@ class Docket(Queue):
         key = self.item_key(item)
         pipeline.hset(self._payload_key(), key,
                       self._serializer.serialize(envelope))
-        pipeline.zadd(self._queue_key(), key, timestamp)
+        zadd_args = [self._queue_key(), timestamp, key]
+        # Need to support clients passing us StrictRedis, which alters ZADD argument order
+        # If passing old busted Redis class, switch them back. Redis subclasses StrictRedis.
+        if isinstance(self.redis, Redis):
+            zadd_args[2], zadd_args[3] = zadd_args[3], zadd_args[2]
+        pipeline.zadd(*zadd_args)
         self._event_registrar.on_push(
             item=item,
             item_key=key,

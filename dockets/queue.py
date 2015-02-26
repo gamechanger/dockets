@@ -5,7 +5,7 @@ import time
 import pickle
 import collections
 import math
-from redis import WatchError
+from redis import WatchError, Redis
 from threading import Thread
 from time import sleep
 from pkg_resources import resource_string
@@ -151,7 +151,12 @@ class Queue(PipelineObject):
             timestamp = time.time() + delay
             key = uuid.uuid1()
             pipeline.hset(self._payload_key(), key, serialized_envelope)
-            pipeline.zadd(self._delayed_queue_key(), key, timestamp)
+            zadd_args = [self._delayed_queue_key(), timestamp, key]
+            # Need to support clients passing us StrictRedis, which alters ZADD argument order
+            # If passing old busted Redis class, switch them back. Redis subclasses StrictRedis.
+            if isinstance(self.redis, Redis):
+                zadd_args[2], zadd_args[3] = zadd_args[3], zadd_args[2]
+            pipeline.zadd(*zadd_args)
         else:
             if self.mode == self.FIFO:
                 pipeline.lpush(self._queue_key(), serialized_envelope)
