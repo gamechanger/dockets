@@ -4,7 +4,7 @@ from datetime import datetime
 import pickle
 
 import dateutil.parser
-from redis import WatchError, Redis
+from redis import WatchError
 from time import sleep
 
 from dockets.pipeline import PipelineObject
