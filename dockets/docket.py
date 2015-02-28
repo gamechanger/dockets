@@ -9,7 +9,7 @@ from time import sleep
 
 from dockets.pipeline import PipelineObject
 from dockets.queue import Queue
-
+from dockets.redis_compatibility import compatible_zadd
 
 class Docket(Queue):
 
@@ -34,7 +34,7 @@ class Docket(Queue):
         key = self.item_key(item)
         pipeline.hset(self._payload_key(), key,
                       self._serializer.serialize(envelope))
-        pipeline.zadd(self._queue_key(), key, timestamp)
+        compatible_zadd(pipeline, self._queue_key(), timestamp, key)
         self._event_registrar.on_push(
             item=item,
             item_key=key,
