@@ -17,7 +17,7 @@ from dockets.json_serializer import JsonSerializer
 from dockets.queue_event_registrar import QueueEventRegistrar
 from dockets.stat_gatherer import StatGatherer
 from dockets.error_queue import ErrorQueue, DummyErrorQueue
-from dockets.redis_compatibility import compatible_zadd
+from dockets.redis_compatibility import compatible_zadd, compatible_lrem, compatible_setex
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +190,7 @@ class Queue(PipelineObject):
         Just removes the envelope from working. Used in error-recovery
         cases where we just want to bail out
         """
-        pipeline.lrem(self._working_queue_key(), serialized_envelope)
+        compatible_lrem(pipeline, self._working_queue_key(), 0, serialized_envelope)
 
     @PipelineObject.with_pipeline
     def _heartbeat(self, pipeline):
@@ -198,8 +198,7 @@ class Queue(PipelineObject):
         Pushes out this worker's timeout.
         """
         pipeline.sadd(self._workers_set_key(), self.worker_id)
-        pipeline.setex(self._worker_activity_key(), 1,
-                       int(math.ceil(self._heartbeat_interval * 50)))
+        compatible_setex(pipeline, self._worker_activity_key(), int(math.ceil(self._heartbeat_interval * 50)), 1)
         logging.debug('DOCKETS: heartbeat')
 
 
