@@ -115,14 +115,7 @@ class Queue(PipelineObject):
         pop_pipeline = self.redis.pipeline()
         pop_pipeline.execute()
 
-        args = [self._queue_key(), self._working_queue_key()]
-        if isinstance(self._wait_time, int) and self._wait_time >= 0:
-            op = self.redis.brpoplpush
-            args.append(self._wait_time)
-        else:
-            op = self.redis.rpoplpush
-
-        serialized_envelope = op(*args)
+        serialized_envelope = self.redis.brpoplpush(self._queue_key(), self._working_queue_key(), self._wait_time)
         if not serialized_envelope:
             return None
         try:
