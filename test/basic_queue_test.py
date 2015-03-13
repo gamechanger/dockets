@@ -349,6 +349,17 @@ def push_once_reclaim_once_unset_worker_key_reclaim(queue):
     assert queue.queued() == 1
     assert_queue_entry(queue.queued_items()[0], {'a': 1}, attempts=1)
 
+@register
+def reclaim_from_other_worker(queue):
+    other_queue = make_queue(queue.__class__)
+    queue._heartbeat()
+    queue.push({'a': 1})
+    queue.pop()
+    redis.delete(queue._worker_activity_key())
+    other_queue._reclaim()
+    assert queue.queued() == 1
+    assert_queue_entry(queue.queued_items()[0], {'a': 1}, attempts=1)
+
 def run_bad_worker(queue):
     queue.push({'a': 1})
     def bad_process_item(item):
