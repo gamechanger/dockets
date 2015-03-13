@@ -71,7 +71,7 @@ class Docket(Queue):
                     except IndexError:
                         # Simulate a blocking ZRANGE by sleeping if there is nothing returned.
                         # This ensures we aren't hammering Redis.
-                        if self._wait_time >= 0:
+                        if self._wait_time > 0:
                             sleep(self._wait_time)
                         return
 
@@ -92,7 +92,7 @@ class Docket(Queue):
                     if next_envelope['when'] > (current_time or time.time()):
                         # Simulate a blocking call by sleeping if there is nothing returned.
                         # This ensures we aren't hammering Redis.
-                        if self._wait_time >= 0:
+                        if self._wait_time > 0:
                             sleep(self._wait_time)
                         return None
 
