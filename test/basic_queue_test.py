@@ -8,7 +8,6 @@ from mock import Mock, patch
 
 from util import *
 from dockets.queue import Queue, HeartbeatThreadException
-from dockets.isolation_queue import IsolationQueue
 from dockets.docket import Docket
 from dockets.errors import ExpiredError
 
@@ -32,13 +31,6 @@ class TestQueue(Queue):
     def process_item(self, item):
         default_process_item(self, item)
 
-class TestIsolationQueue(IsolationQueue):
-    def __init__(self, *args, **kwargs):
-        super(TestIsolationQueue, self).__init__(*args, **kwargs)
-        self.items_processed = []
-
-    def process_item(self, item):
-        default_process_item(self, item)
 
 class TestDocket(Docket):
     def __init__(self, *args, **kwargs):
@@ -478,6 +470,6 @@ def test_multiple_delayed_items_same_data():
     assert item is not None
 
 def test_all_queues():
-    for cls in (TestQueue, TestIsolationQueue, TestDocket):
+    for cls in (TestQueue, TestDocket):
         for test_case in all_queue_tests:
             yield test_case, make_queue(cls)
