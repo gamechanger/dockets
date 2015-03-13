@@ -54,7 +54,7 @@ class Queue(PipelineObject):
         self.version = kwargs.get('version', 1)
         self.worker_id = uuid.uuid1()
 
-        self._wait_time = kwargs.get('wait_time') or 10
+        self._wait_time = kwargs.get('wait_time', 10)
         self._serializer = kwargs.get('serializer', JsonSerializer())
         self._max_attempts = kwargs.get('max_attempts', 3)
         self._heartbeat_interval = kwargs.get('heartbeat_interval', 5)
@@ -115,7 +115,13 @@ class Queue(PipelineObject):
         pop_pipeline = self.redis.pipeline()
         pop_pipeline.execute()
 
-        serialized_envelope = self.redis.brpoplpush(self._queue_key(), self._working_queue_key(), self._wait_time)
+        # If we have a wait time > 0 then use BRPOPLPUSH. Otherwise
+        # use RPOPLPUSH which doesn't block.
+        if int(self._wait_time) > 0:
+            serialized_envelope = self.redis.brpoplpush(self._queue_key(), self._working_queue_key(), self._wait_time)
+        else:
+            serialized_envelope = self.redis.rpoplpush(self._queue_key(), self._working_queue_key())
+
         if not serialized_envelope:
             return None
         try:
