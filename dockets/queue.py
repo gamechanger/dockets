@@ -383,8 +383,8 @@ class Queue(PipelineObject):
     def _working_queue_key(self, worker_id=None):
         return 'queue.{0}.{1}.working'.format(self.name, worker_id or self.worker_id)
 
-    def _worker_activity_key(self):
-        return 'queue.{0}.{1}.active'.format(self.name, self.worker_id)
+    def _worker_activity_key(self, worker_id=None):
+        return 'queue.{0}.{1}.active'.format(self.name, worker_id or self.worker_id)
 
     ## worker handling
 
@@ -392,7 +392,7 @@ class Queue(PipelineObject):
     def _reclaim(self):
         workers = self.redis.smembers(self._workers_set_key())
         for worker_id in workers:
-            if not self.redis.exists(self._worker_activity_key()):
+            if not self.redis.exists(self._worker_activity_key(worker_id)):
                 self._reclaim_worker_queue(worker_id)
                 self.redis.srem(self._workers_set_key(), worker_id)
 
