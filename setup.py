@@ -18,7 +18,7 @@ setuptools.setup(
     packages=["dockets"],
     package_data={"dockets": ["lua/*.lua"]},
     long_description="LONG",
-    install_requires=['simplejson','redis>=2.10','python-dateutil'],
+    install_requires=['simplejson','redis>=2.10.0,<3.0.0','python-dateutil'],
     test_suite = 'nose.collector',
     tests_require=['nose', 'mock']
 )
